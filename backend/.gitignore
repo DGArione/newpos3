@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/*.db
+data/*.db-*
+data/secret.txt
+npm-debug.log*
+.DS_Store
+*.log
+
+# transient test artifacts
+.__*

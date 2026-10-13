@@ -1,0 +1,13 @@
+{
+  "name": "golden-beach-pos",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Golden Beach Restaurant POS — runs as a plain Node.js app (no build step).",
+  "scripts": {
+    "postinstall": "npm --prefix backend install",
+    "start": "npm --prefix backend start",
+    "dev:web": "BACKEND_URL=http://localhost:3001 npm --prefix web run dev",
+    "dev:backend": "PORT=3001 npm --prefix backend start",
+    "build:web": "npm --prefix web run build"
+  }
+}
