@@ -1,40 +1,64 @@
 # Golden Beach Restaurant — POS
 
-Point-of-sale system for **Golden Beach Restaurant, Midigama**, with a custom
-"vintage coastal" brand (olive green + kraft paper, terracotta accents).
+Full-feature restaurant POS with the **Golden POS UI** — orange brand,
+floating sidebar, Poppins font — on top of a Node.js + SQLite backend
+that already includes everything a restaurant needs:
 
-This repo has **two versions of the same app** — use whichever suits you:
+- **Billing / Order Entry**, **Floor / Tables**, **Kitchen (KOT)**, **Payment**
+- **Dashboard**, **Reports**, **Z-Report**, **History**, **Audit Log**
+- **Menu Admin**, **Inventory** (ingredients, stock periods, suppliers, purchases, movements)
+- **Branches** (multi-branch), **Online Orders**, **Reservations**
+- **Users / Staff**, **Time Clock**, **Payroll**, **Petty Cash**
+- **Customers (CRM)**, **Loyalty**, **Gift Cards**, **Promotions**, **Messages**
+- **Receipts, KOT, printing agent** support
 
-| Folder     | What it is                                   | How to run                       |
-|------------|----------------------------------------------|----------------------------------|
-| `backend/` | **Plain Node.js app** (Express + SQLite). No build step — the UI is served directly. | `npm install && npm start` |
-| `web/`     | Next.js front-end (same features, needs a build). Optional. | `npm --prefix web install && npm run build:web` |
+Two UIs ship in the box — pick whichever you want.
 
-## ▶️ Run it (plain Node.js — recommended)
+| UI | What it is | How it looks |
+|---|---|---|
+| **Golden POS (recommended)** | Next.js 14 app in `web/` with orange brand + floating sidebar | Clean, modern |
+| **Classic HTML** | Plain pages served from `backend/public/` | Same features, flatter layout |
 
-No build tools, no Next.js — just Node.
+---
 
-```bash
-npm install     # installs the backend
-npm start       # starts the app
-```
+## ▶️ Run it
 
-Then open **http://localhost:3000**.
+### Requirements
+- **Node.js ≥ 22.5** (uses the built-in `node:sqlite` module — no DB to install)
+- **~2 GB free disk space on C:** (npm install is big)
 
-> Requires **Node.js ≥ 22.5** (the app uses the built-in `node:sqlite` module,
-> so there is no separate database to install). On first run it creates
-> `backend/data/pos.db` and seeds the Golden Beach menu + demo accounts.
-> Use a different port with `PORT=8080 npm start`.
+### One command — Golden POS UI + backend together
 
-You can also run it straight from the backend folder:
-
-```bash
-cd backend
+```powershell
 npm install
 npm start
 ```
 
-### Demo logins (PIN)
+Then open **http://localhost:3000**.
+
+That one command runs the backend API on `:3001` and the Golden POS UI on
+`:3000`. First page load takes ~15 seconds while Next.js compiles — after
+that every click is instant.
+
+### Classic HTML UI
+
+If you want the old plain-HTML pages instead (served directly by the
+backend, no build step):
+
+```powershell
+npm run start:classic
+```
+
+### Development
+
+```powershell
+npm run dev:backend      # terminal 1 — API on :3001
+npm run dev:web          # terminal 2 — Next.js UI on :3000 with hot reload
+```
+
+---
+
+## Demo logins (PIN)
 
 | Role          | PIN  |
 |---------------|------|
@@ -47,34 +71,37 @@ npm start
 
 Change these under **Users** before real use.
 
-## The menu
+---
 
-The demo menu is replaced with the **real Golden Beach menu** from the printed
-price lists — 142 dishes across 22 categories (Rice & Curry, Fried Rice, Kottu,
-Pizza, Roti, Juice, Lassi, Milkshake, Breakfast, …) with the correct `Rs.`
-prices, including the full pizza range (Margherita Rs.1700 → Mix Seafood
-Rs.2800). It's editable in-app under **Menu Admin**. Service charge and VAT are
-set to 0 so totals match the printed prices.
+## Where data is kept
 
-## The redesign
+Everything lives in `backend/data/pos.db` (SQLite). Back up that one file
+to back up your whole restaurant. Delete it and restart to re-seed with
+the demo menu + accounts.
 
-The whole interface wears a **Golden Beach** vintage brand — applied through the
-app's theme system, so every screen is restyled with no build step:
+---
 
-- **Theme** — a new `goldenBeach` (light) / `goldenBeachNight` (dark) palette in
-  `backend/public/theme.js`: olive green, kraft paper, terracotta accents.
-- **Fonts** — Fraunces (headings) + Hanken Grotesk (UI), loaded in
-  `backend/public/style.css`.
-- Switch light/dark from the top bar; pick other palettes under **Settings**.
+## Troubleshooting
 
-## The Next.js version (`web/`)
+### `ENOSPC: no space left on device`
+Your C: drive is full. Free up at least 2 GB and run `npm install` again.
+Or move the npm cache to another drive: `npm config set cache "D:\npm-cache"`.
 
-An alternative front-end built in Next.js with the same brand. It talks to the
-same backend API. Run the backend on `:3001` and the web app on `:3000`:
+### `@next/swc-win32-x64-msvc, but an error occurred`
+Corrupt install from a disk-full `npm install`. Delete `node_modules` and
+`package-lock.json` in `web/` and reinstall:
 
-```bash
-npm run dev:backend     # terminal 1 — API on :3001
-npm run dev:web         # terminal 2 — Next.js UI on :3000
+```cmd
+rmdir /s /q web\node_modules
+del web\package-lock.json
+npm install
 ```
 
-Most people should just use the plain Node.js app above.
+### `Could not find a production build in the '.next' directory`
+You ran `next start` instead of `next dev`. Use `npm start` (which runs
+dev mode) or `npm run build:web` first.
+
+### UI still shows the old kraft-paper look
+That's the classic HTML UI, not the Golden POS one. Make sure you're running
+`npm start` (not `npm run start:classic`) and visiting `http://localhost:3000`,
+not `http://localhost:3001`.
