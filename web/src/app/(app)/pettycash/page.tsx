@@ -1,87 +1,186 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, ArrowDownLeft, ArrowUpRight, Coins } from "lucide-react";
+import { Coins, Plus, ArrowUpRight, ArrowDownLeft, Wallet } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
-import { PageHeader, PageLoader, EmptyState, useToast, Modal } from "@/components/ui";
+import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
 
-interface Entry { id: number; type: string; amount: number; description: string; staffName: string; createdAt: string; }
+interface Entry {
+  id: number;
+  type: "in" | "out";
+  amount: number;
+  reason: string;
+  staffName: string;
+  createdAt: string;
+}
+interface PettyCashResp { entries: Entry[]; balance: number }
 
 export default function PettyCashPage() {
   const toast = useToast();
   const settings = useSettings();
   const currency = settings?.currencySymbol || "Rs. ";
-  const [list, setList] = useState<Entry[]>([]);
+  const [data, setData] = useState<PettyCashResp | null>(null);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<"in" | "out" | null>(null);
 
-  const load = () => apiGet<Entry[] | { entries: Entry[] }>("/petty-cash")
-    .then((d) => setList(Array.isArray(d) ? d : (d?.entries || [])))
-    .catch(() => {}).finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    setLoading(true);
+    apiGet<PettyCashResp>("/petty-cash")
+      .then(setData)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
 
-  const balance = list.reduce((s, e) => s + (e.type === "in" ? e.amount : -e.amount), 0);
+  useEffect(load, []);
+
+  const inTotal  = (data?.entries || []).filter((e) => e.type === "in").reduce((s, e) => s + e.amount, 0);
+  const outTotal = (data?.entries || []).filter((e) => e.type === "out").reduce((s, e) => s + e.amount, 0);
 
   return (
-    <div>
-      <PageHeader title="Petty cash" subtitle="Float movements in and out of the drawer.">
-        <button onClick={() => setOpen(true)} className="btn btn-primary btn-sm"><Plus size={15} /> New entry</button>
-      </PageHeader>
+    <div className="flex flex-col gap-3">
+      <Screen>
+        <PageHeader title="Petty Cash" subtitle="Daily float — money in and out" icon={Coins}>
+          <button onClick={() => setOpen("in")} className="btn btn-soft btn-sm">
+            <ArrowDownLeft size={14} /> Cash in
+          </button>
+          <button onClick={() => setOpen("out")} className="btn btn-primary btn-sm">
+            <ArrowUpRight size={14} /> Cash out
+          </button>
+        </PageHeader>
 
-      <div className="gb-card p-5 mb-5 inline-block">
-        <div className="text-[11px] uppercase tracking-wider text-muted font-semibold">Current balance</div>
-        <div className="font-head text-3xl mono" style={{ color: balance >= 0 ? "var(--olive-700)" : "var(--bad)" }}>{money(balance, currency)}</div>
-      </div>
-
-      {loading ? <PageLoader /> : !list.length ? <EmptyState title="No entries" hint="Record cash in or out to start the log." icon={<Coins size={30} />} /> : (
-        <div className="gb-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-muted text-[11px] uppercase tracking-wide" style={{ background: "var(--panel-2)" }}>
-              <th className="py-2.5 px-4">Type</th><th>Description</th><th>By</th><th>When</th><th className="text-right pr-4">Amount</th>
-            </tr></thead>
-            <tbody>
-              {list.map((e) => (
-                <tr key={e.id} className="border-t border-line-soft">
-                  <td className="py-2.5 px-4">{e.type === "in" ? <span className="pill pill-ok"><ArrowDownLeft size={12} /> In</span> : <span className="pill pill-bad"><ArrowUpRight size={12} /> Out</span>}</td>
-                  <td>{e.description || "—"}</td>
-                  <td className="text-muted">{e.staffName}</td>
-                  <td className="text-muted text-[12px]">{(e.createdAt || "").replace("T", " ").slice(0, 16)}</td>
-                  <td className="text-right pr-4 mono font-semibold" style={{ color: e.type === "in" ? "var(--ok)" : "var(--bad)" }}>{e.type === "in" ? "+" : "–"}{money(e.amount, currency)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-3 gap-3">
+          <Tile icon={<Wallet size={16} />}      label="Balance" value={money(data?.balance || 0, currency)} accent />
+          <Tile icon={<ArrowDownLeft size={16} />} label="In total" value={money(inTotal, currency)} />
+          <Tile icon={<ArrowUpRight size={16} />}  label="Out total" value={money(outTotal, currency)} />
         </div>
-      )}
+      </Screen>
 
-      {open && <AddEntry currency={currency} onClose={() => setOpen(false)} onDone={() => { setOpen(false); setLoading(true); load(); toast.push("ok", "Entry recorded"); }} />}
+      <Screen>
+        <h2 className="text-[15px] font-semibold text-ink mb-4">Movements</h2>
+        {loading ? (
+          <PageLoader />
+        ) : !data?.entries.length ? (
+          <EmptyState title="No movements yet" hint="Log a cash in or cash out above." icon={<Coins size={30} />} />
+        ) : (
+          <div className="flex flex-col gap-1">
+            {data.entries.map((e) => (
+              <div
+                key={e.id}
+                className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-[13px]"
+                style={{ background: "var(--panel-2)" }}
+              >
+                <span
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    background: e.type === "in" ? "var(--ok-wash)" : "var(--bad-wash)",
+                    color: e.type === "in" ? "var(--ok)" : "var(--bad)",
+                  }}
+                >
+                  {e.type === "in" ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-ink font-medium truncate">
+                    {e.reason || <span className="text-muted italic">(no reason)</span>}
+                  </div>
+                  <div className="text-[11.5px] text-muted">
+                    {e.staffName} · {new Date(e.createdAt.replace(" ", "T")).toLocaleString()}
+                  </div>
+                </div>
+                <div
+                  className="mono font-semibold"
+                  style={{ color: e.type === "in" ? "var(--ok)" : "var(--bad)" }}
+                >
+                  {e.type === "in" ? "+" : "−"}{money(e.amount, currency)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Screen>
+
+      {open && (
+        <AddEntry
+          type={open}
+          currency={currency}
+          onClose={() => setOpen(null)}
+          onDone={() => { setOpen(null); load(); toast.push("ok", "Logged"); }}
+        />
+      )}
     </div>
   );
 }
 
-function AddEntry({ currency, onClose, onDone }: { currency: string; onClose: () => void; onDone: () => void }) {
-  const [type, setType] = useState<"in" | "out">("out");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function save() {
-    if (!Number(amount)) return;
-    setBusy(true);
-    try { await apiPost("/petty-cash", { type, amount: Number(amount), description }); onDone(); } catch { setBusy(false); }
-  }
+function Tile({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
+  const bg = accent ? "var(--olive)" : "var(--panel-2)";
+  const fg = accent ? "#fff" : "var(--ink)";
+  const iconColor = accent ? "rgba(255,255,255,.85)" : "var(--olive)";
   return (
-    <Modal open title="Petty cash entry" onClose={onClose}>
+    <div className="rounded-xl p-4" style={{ background: bg, border: accent ? "none" : "1px solid var(--line)" }}>
+      <div className="flex items-center gap-2 mb-2" style={{ color: iconColor }}>
+        {icon}
+        <span className="text-[11px] uppercase tracking-wider font-semibold">{label}</span>
+      </div>
+      <div className="mono text-[20px] font-semibold leading-none" style={{ color: fg }}>{value}</div>
+    </div>
+  );
+}
+
+function AddEntry({
+  type, currency, onClose, onDone,
+}: {
+  type: "in" | "out";
+  currency: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useToast();
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    const n = Number(amount);
+    if (!n || n <= 0) { toast.push("bad", "Amount must be greater than 0"); return; }
+    if (!reason.trim()) { toast.push("bad", "A short reason is required"); return; }
+    setBusy(true);
+    try {
+      await apiPost("/petty-cash", { type, amount: n, reason });
+      onDone();
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); setBusy(false); }
+  }
+
+  return (
+    <Modal open title={type === "in" ? "Cash in" : "Cash out"} onClose={onClose} width={420}>
       <div className="space-y-3">
-        <div className="flex gap-1.5 p-1 rounded-full" style={{ background: "var(--panel-2)" }}>
-          {(["out", "in"] as const).map((t) => (
-            <button key={t} onClick={() => setType(t)} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold capitalize"
-              style={type === t ? { background: "var(--panel)", color: "var(--olive-700)" } : { color: "var(--muted)" }}>Cash {t}</button>
-          ))}
+        <div>
+          <label className="lbl">Amount ({currency.trim()})</label>
+          <input
+            className="inp mono text-right text-[18px]"
+            inputMode="decimal"
+            value={amount}
+            autoFocus
+            onChange={(e) => setAmount(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+          />
         </div>
-        <div><label className="lbl">Amount ({currency.trim()})</label><input className="inp mono" inputMode="decimal" value={amount} autoFocus onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} /></div>
-        <div><label className="lbl">Description</label><input className="inp" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
-        <button onClick={save} disabled={busy} className="btn btn-primary w-full">Record entry</button>
+        <div>
+          <label className="lbl">Reason</label>
+          <input
+            className="inp"
+            placeholder={type === "in" ? "e.g. opening float, cash deposit" : "e.g. petrol, grocery, change"}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+          />
+        </div>
+        <button
+          onClick={save}
+          disabled={busy}
+          className={type === "in" ? "btn btn-soft w-full btn-lg" : "btn btn-primary w-full btn-lg"}
+        >
+          {busy ? "Saving…" : type === "in" ? "Record cash in" : "Record cash out"}
+        </button>
       </div>
     </Modal>
   );

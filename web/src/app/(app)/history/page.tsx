@@ -1,100 +1,204 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Search, Receipt, RefreshCw } from "lucide-react";
-import { apiGet } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { History as HistoryIcon, Search, Receipt, RefreshCw, X } from "lucide-react";
+import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
-import { Order } from "@/lib/types";
-import { PageHeader, PageLoader, EmptyState, Modal } from "@/components/ui";
+import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
+import type { Order } from "@/lib/types";
 
-const FILTERS = ["all", "paid", "unpaid", "voided"] as const;
+type Filter = "all" | "paid" | "unpaid" | "voided";
 
 export default function HistoryPage() {
+  const toast = useToast();
   const settings = useSettings();
   const currency = settings?.currencySymbol || "Rs. ";
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
-  const [sel, setSel] = useState<Order | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [detail, setDetail] = useState<Order | null>(null);
 
-  const load = () => { setLoading(true); apiGet<Order[]>("/orders?all=1").then((d) => setOrders(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false)); };
-  useEffect(load, []);
+  const load = useCallback(() => {
+    setLoading(true);
+    apiGet<Order[]>("/orders")
+      .then((d) => setOrders(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(load, [load]);
 
   const shown = useMemo(() => {
-    let list = orders;
-    if (filter === "voided") list = list.filter((o) => o.status === "voided");
-    else if (filter === "paid") list = list.filter((o) => o.paymentStatus === "paid");
+    let list = [...orders];
+    if (filter === "paid") list = list.filter((o) => o.paymentStatus === "paid");
     else if (filter === "unpaid") list = list.filter((o) => o.paymentStatus !== "paid" && o.status !== "voided");
-    if (q.trim()) { const s = q.toLowerCase(); list = list.filter((o) => (o.displayNum || "").toLowerCase().includes(s) || (o.tableName || "").toLowerCase().includes(s) || (o.customerName || "").toLowerCase().includes(s)); }
-    return [...list].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-  }, [orders, q, filter]);
+    else if (filter === "voided") list = list.filter((o) => o.status === "voided");
+    if (q.trim()) {
+      const s = q.toLowerCase();
+      list = list.filter((o) =>
+        (o.displayNum || "").toLowerCase().includes(s) ||
+        (o.tableName || "").toLowerCase().includes(s) ||
+        (o.customerName || "").toLowerCase().includes(s) ||
+        (o.customerPhone || "").includes(s),
+      );
+    }
+    return list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  }, [orders, filter, q]);
+
+  async function refund(o: Order) {
+    if (!confirm(`Refund ${o.displayNum} (${money(o.grandTotal, currency)})?`)) return;
+    try {
+      await apiPost(`/orders/${o.id}/refund`, { reason: "Manager refund" });
+      toast.push("ok", `${o.displayNum} refunded`);
+      load();
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
+  }
 
   return (
-    <div>
-      <PageHeader title="Order history" subtitle={`${orders.length} orders on record`}>
-        <button onClick={load} className="btn btn-ghost btn-sm"><RefreshCw size={14} /> Refresh</button>
-      </PageHeader>
+    <div className="flex flex-col gap-3">
+      <Screen>
+        <PageHeader title="History" subtitle="Every order ever rung in" icon={HistoryIcon}>
+          <button onClick={load} className="btn btn-ghost btn-sm"><RefreshCw size={14} /> Refresh</button>
+        </PageHeader>
 
-      <div className="flex flex-wrap gap-3 items-center mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <input className="inp pl-9" placeholder="Search order, table, customer…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <div className="relative flex-1 max-w-md min-w-[200px]">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <input className="inp pl-9" placeholder="Search by #, table, name or phone…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <div className="flex gap-1.5 p-1 rounded-full" style={{ background: "var(--panel-2)" }}>
+            {(["all", "paid", "unpaid", "voided"] as Filter[]).map((f) => (
+              <button key={f} onClick={() => setFilter(f)}
+                className="px-3 py-1.5 rounded-full text-[12.5px] font-semibold capitalize transition-colors"
+                style={filter === f
+                  ? { background: "var(--panel)", color: "var(--olive-700)", boxShadow: "var(--shadow-sm)" }
+                  : { color: "var(--muted)" }}>
+                {f}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex gap-1.5">
-          {FILTERS.map((f) => (
-            <button key={f} onClick={() => setFilter(f)} className="px-3 py-1.5 rounded-full text-[12.5px] font-semibold capitalize border transition-colors"
-              style={filter === f ? { background: "var(--olive)", color: "#ffffff", borderColor: "var(--olive)" } : { background: "var(--panel)", color: "var(--muted)", borderColor: "var(--line)" }}>{f}</button>
-          ))}
-        </div>
-      </div>
 
-      {loading ? <PageLoader /> : !shown.length ? <EmptyState title="No orders" hint="Nothing matches that filter yet." icon={<Receipt size={30} />} /> : (
-        <div className="gb-card overflow-hidden">
+        {loading ? <PageLoader /> : !shown.length ? (
+          <EmptyState title="No orders found" hint="Try another filter or search." icon={<Receipt size={30} />} />
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-muted text-[11px] uppercase tracking-wide" style={{ background: "var(--panel-2)" }}>
-                <th className="py-2.5 px-4">Order</th><th>Table / Type</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th>When</th>
-              </tr></thead>
+              <thead>
+                <tr className="text-left text-muted text-[11px] uppercase tracking-wider font-semibold">
+                  <th className="py-2.5">#</th>
+                  <th>When</th>
+                  <th>Table / Customer</th>
+                  <th>Items</th>
+                  <th>Status</th>
+                  <th className="text-right pr-4">Total</th>
+                </tr>
+              </thead>
               <tbody>
-                {shown.map((o) => (
-                  <tr key={o.id} onClick={() => setSel(o)} className="border-t border-line-soft cursor-pointer hover:bg-panel-2 transition-colors">
-                    <td className="py-2.5 px-4 font-semibold font-head">{o.displayNum}</td>
-                    <td>{o.tableName} <span className="text-muted capitalize">· {o.orderType}</span></td>
-                    <td className="mono">{o.items.length}</td>
-                    <td className="mono font-semibold text-clay">{money(o.total, currency)}</td>
-                    <td><PayPill s={o.paymentStatus} /></td>
-                    <td className="capitalize text-muted">{o.status}</td>
-                    <td className="text-muted text-[12px]">{(o.createdAt || "").replace("T", " ").slice(0, 16)}</td>
+                {shown.slice(0, 300).map((o) => (
+                  <tr
+                    key={o.id}
+                    className="border-t border-line-soft cursor-pointer hover:bg-panel-2"
+                    onClick={() => setDetail(o)}
+                  >
+                    <td className="py-2.5 font-semibold mono">{o.displayNum}</td>
+                    <td className="text-muted text-[12px] whitespace-nowrap">
+                      {(o.createdAt || "").replace("T", " ").slice(0, 16)}
+                    </td>
+                    <td className="text-[12.5px]">
+                      {o.tableName || "—"}
+                      {o.customerName && <span className="text-muted"> · {o.customerName}</span>}
+                    </td>
+                    <td className="text-muted text-[12px]">{o.items.length} items</td>
+                    <td>
+                      <span className={`pill ${o.status === "voided" ? "pill-bad" : o.paymentStatus === "paid" ? "pill-ok" : "pill-warn"}`}>
+                        {o.status === "voided" ? "cancelled" : o.paymentStatus}
+                      </span>
+                    </td>
+                    <td className="text-right pr-4 mono font-semibold">{money(o.grandTotal || o.total, currency)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </Screen>
 
-      {sel && (
-        <Modal open title={`${sel.displayNum} · ${sel.tableName}`} onClose={() => setSel(null)}>
-          <div className="space-y-1.5 mb-4">
-            {sel.items.map((it, i) => (
-              <div key={i} className="flex justify-between text-sm"><span>{it.qty}× {it.name}</span><span className="mono text-muted">{money(it.lineTotal, currency)}</span></div>
-            ))}
-          </div>
-          <div className="border-t border-line-soft pt-3 space-y-1 text-sm">
-            <div className="flex justify-between text-muted"><span>Subtotal</span><span className="mono">{money(sel.subtotal, currency)}</span></div>
-            {sel.discount > 0 && <div className="flex justify-between text-muted"><span>Discount</span><span className="mono">– {money(sel.discount, currency)}</span></div>}
-            {sel.serviceCharge > 0 && <div className="flex justify-between text-muted"><span>Service</span><span className="mono">{money(sel.serviceCharge, currency)}</span></div>}
-            {sel.vat > 0 && <div className="flex justify-between text-muted"><span>VAT</span><span className="mono">{money(sel.vat, currency)}</span></div>}
-            <div className="flex justify-between font-head text-lg pt-1"><span>Total</span><span className="mono text-clay">{money(sel.total, currency)}</span></div>
-          </div>
-        </Modal>
+      {detail && (
+        <OrderDetail order={detail} currency={currency} onClose={() => setDetail(null)} onRefund={() => refund(detail)} />
       )}
     </div>
   );
 }
 
-function PayPill({ s }: { s: string }) {
-  const map: Record<string, string> = { paid: "pill-ok", partial: "pill-warn", unpaid: "pill-clay" };
-  return <span className={`pill ${map[s] || "pill-clay"} capitalize`}>{s}</span>;
+function OrderDetail({ order, currency, onClose, onRefund }: { order: Order; currency: string; onClose: () => void; onRefund: () => void }) {
+  return (
+    <Modal open title={`Order ${order.displayNum}`} onClose={onClose} width={520}>
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <span className="pill pill-olive">{order.orderType}</span>
+        <span className={`pill ${order.status === "voided" ? "pill-bad" : order.paymentStatus === "paid" ? "pill-ok" : "pill-warn"}`}>
+          {order.status === "voided" ? "cancelled" : order.paymentStatus}
+        </span>
+        <span className="text-[12.5px] text-muted ml-auto">
+          {(order.createdAt || "").replace("T", " ").slice(0, 16)}
+        </span>
+      </div>
+
+      {(order.tableName || order.customerName) && (
+        <div className="text-[13px] text-muted mb-3">
+          {order.tableName && <>Table: <span className="text-ink font-medium">{order.tableName}</span></>}
+          {order.customerName && <> {order.tableName ? "·" : ""} {order.customerName} ({order.customerPhone})</>}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1 mb-4 max-h-[280px] overflow-y-auto">
+        {order.items.map((it, i) => (
+          <div key={i} className="flex items-start gap-3 rounded-lg px-3 py-2" style={{ background: "var(--panel-2)" }}>
+            <span className="mono text-[13px] font-semibold text-muted min-w-[26px]">{it.qty}×</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] text-ink">{it.name}</div>
+              {it.modifiers?.map((m, j) => <div key={j} className="text-[11px] text-muted">+ {m.option}</div>)}
+              {it.notes && <div className="text-[11px] italic" style={{ color: "var(--olive-700)" }}>“{it.notes}”</div>}
+            </div>
+            <div className="mono text-[13px] font-semibold whitespace-nowrap">{money(it.lineTotal, currency)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl p-4" style={{ background: "var(--panel-2)" }}>
+        <TotalLine label="Subtotal" value={money(order.subtotal, currency)} />
+        {order.discount > 0 && <TotalLine label="Discount" value={`−${money(order.discount, currency)}`} warn />}
+        {order.serviceCharge > 0 && <TotalLine label="Service" value={money(order.serviceCharge, currency)} />}
+        {order.vat > 0 && <TotalLine label="VAT" value={money(order.vat, currency)} />}
+        <div className="divider my-2" />
+        <TotalLine label="Total" value={money(order.grandTotal || order.total, currency)} big />
+      </div>
+
+      {order.status !== "voided" && order.paymentStatus === "paid" && (
+        <button onClick={onRefund} className="btn btn-danger w-full mt-4">
+          <X size={15} /> Refund order
+        </button>
+      )}
+      {order.status === "voided" && order.voidData && (
+        <div className="mt-4 rounded-lg p-3 text-[12.5px]" style={{ background: "var(--bad-wash)", color: "var(--bad)" }}>
+          Cancelled by {order.voidData.byStaffName || "staff"}
+          {order.voidData.reason ? ` — "${order.voidData.reason}"` : ""}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function TotalLine({ label, value, big, warn }: { label: string; value: string; big?: boolean; warn?: boolean }) {
+  return (
+    <div className="flex justify-between items-center" style={{ fontSize: big ? 15 : 12.5, marginBottom: big ? 0 : 4 }}>
+      <span className="text-muted" style={{ fontWeight: big ? 600 : 400 }}>{label}</span>
+      <span
+        className="mono"
+        style={{ fontWeight: big ? 700 : 600, color: warn ? "var(--bad)" : big ? "var(--olive-700)" : "var(--ink)" }}
+      >
+        {value}
+      </span>
+    </div>
+  );
 }

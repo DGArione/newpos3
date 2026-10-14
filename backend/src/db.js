@@ -430,6 +430,8 @@ function migrate() {
   };
   addCol('settings', 'autoStockClose', 'INTEGER DEFAULT 1');
   addCol('settings', 'lastAutoStockCloseMonth', 'TEXT DEFAULT NULL');
+  // Golden POS home banners (JSON array of {title, body, color?, imageUrl?, menuItemId?}).
+  addCol('settings', 'homeBanners', "TEXT DEFAULT '[]'");
   // Separate approval PIN for managers (used to authorise discounts/voids/
   // refunds), kept distinct from the login PIN.
   addCol('users', 'approvalPin', 'TEXT DEFAULT NULL');

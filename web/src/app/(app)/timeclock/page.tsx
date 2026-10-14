@@ -1,75 +1,140 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { LogIn, LogOut, Clock } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Clock, LogIn, LogOut, History as HistoryIcon } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { PageHeader, PageLoader, EmptyState, useToast } from "@/components/ui";
+import { PageHeader, PageLoader, EmptyState, Screen, useToast } from "@/components/ui";
 
-interface Shift { id: number; userId: number; userName: string; clockIn: string; clockOut: string | null; }
-
-function fmt(s: string | null) { return s ? s.replace("T", " ").slice(0, 16) : "—"; }
-function hours(a: string, b: string | null) {
-  const end = b ? new Date(b.replace(" ", "T")).getTime() : Date.now();
-  const h = (end - new Date(a.replace(" ", "T")).getTime()) / 3600000;
-  return h > 0 ? h.toFixed(2) : "0.00";
+interface Shift {
+  id: number;
+  userId: number;
+  userName?: string;
+  clockIn: string;
+  clockOut: string | null;
+  hours?: number;
 }
 
 export default function TimeclockPage() {
-  const toast = useToast();
   const { user } = useAuth();
-  const [shifts, setShifts] = useState<Shift[]>([]);
+  const toast = useToast();
+  const [open, setOpen] = useState<Shift | null>(null);
+  const [history, setHistory] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(Date.now());
   const [busy, setBusy] = useState(false);
 
-  const load = () => apiGet<Shift[]>("/shifts").then((d) => setShifts(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+  const load = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [o, h] = await Promise.all([
+        apiGet<Shift | null>(`/shifts/open/${user.id}`),
+        apiGet<Shift[]>(`/shifts?userId=${user.id}`),
+      ]);
+      setOpen(o && o.id ? o : null);
+      setHistory(Array.isArray(h) ? h : []);
+    } catch { /* keep last */ }
+    finally { setLoading(false); }
+  }, [user]);
 
-  const myOpen = shifts.find((s) => s.userId === user?.id && !s.clockOut);
+  useEffect(() => {
+    load();
+    const t = setInterval(() => setTick(Date.now()), 1000);
+    const r = setInterval(load, 15000);
+    return () => { clearInterval(t); clearInterval(r); };
+  }, [load]);
 
-  async function punch() {
+  async function toggle() {
+    if (!user || busy) return;
     setBusy(true);
     try {
-      await apiPost(myOpen ? "/shifts/clockout" : "/shifts/clockin", {});
-      toast.push("ok", myOpen ? "Clocked out — have a good one" : "Clocked in — welcome");
-      setLoading(true); load();
-    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); } finally { setBusy(false); }
+      await apiPost(open ? "/shifts/clockout" : "/shifts/clockin", { userId: user.id });
+      toast.push("ok", open ? "Clocked out" : "Clocked in");
+      await load();
+    } catch (e) {
+      toast.push("bad", e instanceof Error ? e.message : "Failed");
+    } finally { setBusy(false); }
   }
 
+  if (!user) return null;
+  if (loading) return <PageLoader label="Loading shift" />;
+
+  // Running duration display (HH:MM:SS)
+  let runningSecs = 0;
+  if (open) runningSecs = Math.max(0, Math.floor((tick - new Date(open.clockIn).getTime()) / 1000));
+  const h = String(Math.floor(runningSecs / 3600)).padStart(2, "0");
+  const m = String(Math.floor((runningSecs % 3600) / 60)).padStart(2, "0");
+  const s = String(runningSecs % 60).padStart(2, "0");
+
   return (
-    <div>
-      <PageHeader title="Time clock" subtitle="Clock in and out, and review shifts." />
+    <div className="flex flex-col gap-3">
+      <Screen>
+        <PageHeader title="Time Clock" subtitle={`Shift tracking for ${user.name}`} icon={Clock} />
 
-      <div className="gb-card p-6 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4"
-        style={{ background: myOpen ? "linear-gradient(135deg, var(--olive-700), var(--olive))" : "var(--panel)", borderColor: myOpen ? "transparent" : "var(--line)" }}>
-        <div style={{ color: myOpen ? "#ffffff" : "var(--ink)" }}>
-          <div className="text-sm opacity-80">{myOpen ? "On shift since" : "You're clocked out"}</div>
-          <div className="font-head text-2xl">{myOpen ? `${fmt(myOpen.clockIn)} · ${hours(myOpen.clockIn, null)}h` : "Ready when you are"}</div>
-        </div>
-        <button onClick={punch} disabled={busy} className={`btn btn-lg ${myOpen ? "btn-primary" : "btn-olive"}`}>
-          {myOpen ? <><LogOut size={18} /> Clock out</> : <><LogIn size={18} /> Clock in</>}
-        </button>
-      </div>
+        <div className="flex flex-col items-center gap-5 py-6">
+          <div
+            className="mono text-[64px] font-semibold leading-none"
+            style={{ color: open ? "var(--olive)" : "var(--muted)", letterSpacing: "-0.03em" }}
+          >
+            {h}:{m}:{s}
+          </div>
 
-      {loading ? <PageLoader /> : !shifts.length ? <EmptyState title="No shifts yet" icon={<Clock size={30} />} /> : (
-        <div className="gb-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-muted text-[11px] uppercase tracking-wide" style={{ background: "var(--panel-2)" }}>
-              <th className="py-2.5 px-4">Staff</th><th>Clock in</th><th>Clock out</th><th>Hours</th>
-            </tr></thead>
-            <tbody>
-              {shifts.map((s) => (
-                <tr key={s.id} className="border-t border-line-soft">
-                  <td className="py-2.5 px-4 font-medium">{s.userName}</td>
-                  <td className="text-muted">{fmt(s.clockIn)}</td>
-                  <td className="text-muted">{s.clockOut ? fmt(s.clockOut) : <span className="pill pill-ok">On shift</span>}</td>
-                  <td className="mono font-semibold">{hours(s.clockIn, s.clockOut)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p className="text-sm text-muted">
+            {open
+              ? `Clocked in at ${new Date(open.clockIn).toLocaleTimeString()}`
+              : "Not currently clocked in"}
+          </p>
+
+          <button
+            onClick={toggle}
+            disabled={busy}
+            className={open ? "btn btn-danger btn-lg" : "btn btn-primary btn-lg"}
+            style={{ minWidth: 200 }}
+          >
+            {open ? <LogOut size={18} /> : <LogIn size={18} />}
+            {busy ? "…" : open ? "Clock out" : "Clock in"}
+          </button>
         </div>
-      )}
+      </Screen>
+
+      <Screen>
+        <div className="flex items-center gap-2 mb-4">
+          <HistoryIcon size={17} style={{ color: "var(--olive)" }} />
+          <h2 className="text-[15px] font-semibold text-ink">Recent shifts</h2>
+        </div>
+
+        {!history.length ? (
+          <EmptyState title="No shifts yet" hint="Your clock-ins will appear here." />
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {history.slice(0, 15).map((sh) => {
+              const inStr  = new Date(sh.clockIn).toLocaleString();
+              const outStr = sh.clockOut ? new Date(sh.clockOut).toLocaleTimeString() : "—";
+              const hours = sh.clockOut
+                ? ((new Date(sh.clockOut).getTime() - new Date(sh.clockIn).getTime()) / 3600000).toFixed(2) + "h"
+                : "in progress";
+              return (
+                <div
+                  key={sh.id}
+                  className="flex items-center justify-between rounded-xl px-4 py-2.5 text-[13px]"
+                  style={{ background: "var(--panel-2)" }}
+                >
+                  <span>
+                    <span className="text-ink font-medium">{inStr}</span>
+                    <span className="text-muted"> → {outStr}</span>
+                  </span>
+                  <span
+                    className="mono font-semibold"
+                    style={{ color: sh.clockOut ? "var(--olive-700)" : "var(--ok)" }}
+                  >
+                    {hours}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Screen>
     </div>
   );
 }

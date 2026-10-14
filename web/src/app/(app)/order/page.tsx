@@ -2,11 +2,19 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Plus, Minus, Trash2, Flame, Send, CreditCard, ShoppingBag } from "lucide-react";
+import { Search, Plus, Minus, Trash2, Flame, Send, CreditCard, ShoppingBag, User, UserPlus, X } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
 import { MenuItem, CartLine, TableRow, Order, ModifierGroup } from "@/lib/types";
 import { PageLoader, EmptyState, useToast, Modal } from "@/components/ui";
+
+interface Customer {
+  id: number;
+  name: string;
+  phone: string;
+  address: string;
+  loyaltyPoints?: number;
+}
 
 type OrderType = "dine-in" | "takeaway" | "delivery";
 
@@ -32,6 +40,7 @@ function OrderInner() {
   const [cust, setCust] = useState({ name: "", phone: "", address: "" });
   const [sending, setSending] = useState(false);
   const [modItem, setModItem] = useState<MenuItem | null>(null);
+  const [custLookupOpen, setCustLookupOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -133,11 +142,37 @@ function OrderInner() {
     <div className="grid lg:grid-cols-[1fr_380px] gap-5 -mt-1">
       {/* Menu side */}
       <div className="min-w-0">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex items-center gap-3 mb-4 flex-wrap">
+          <div className="relative flex-1 max-w-md min-w-[200px]">
             <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input className="inp pl-9" placeholder="Search dish or PLU…" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
+
+          {cust.name || cust.phone ? (
+            <div
+              className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
+              style={{ background: "var(--olive-wash)", color: "var(--olive-700)", border: "1px solid var(--olive)" }}
+            >
+              <User size={14} />
+              <span>{cust.name || cust.phone}</span>
+              <button
+                onClick={() => setCust({ name: "", phone: "", address: "" })}
+                aria-label="Clear customer"
+                className="opacity-70 hover:opacity-100"
+                title="Detach customer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setCustLookupOpen(true)}
+              className="btn btn-ghost btn-sm"
+              title="Attach a customer to this order"
+            >
+              <UserPlus size={14} /> Customer
+            </button>
+          )}
         </div>
 
         {!q && (
@@ -253,6 +288,14 @@ function OrderInner() {
       </aside>
 
       {modItem && <ModifierModal item={modItem} currency={currency} onClose={() => setModItem(null)} onAdd={(mods, qty, notes) => { addLine(modItem, mods, qty, notes); setModItem(null); }} />}
+
+      {custLookupOpen && (
+        <CustomerLookup
+          currency={currency}
+          onClose={() => setCustLookupOpen(false)}
+          onPick={(c) => { setCust({ name: c.name, phone: c.phone, address: c.address || "" }); setCustLookupOpen(false); toast.push("ok", `Customer ${c.name || c.phone} attached`); }}
+        />
+      )}
     </div>
   );
 }
@@ -311,6 +354,136 @@ function ModifierModal({ item, currency, onClose, onAdd }: {
           <button onClick={() => onAdd(mods, qty, notes)} className="btn btn-primary">Add · {money(unit * qty, currency)}</button>
         </div>
       </div>
+    </Modal>
+  );
+}
+
+/** Customer lookup / attach modal.
+ *  Supports: search by phone or name, pick existing, or create a new one and attach.
+ */
+function CustomerLookup({
+  currency, onClose, onPick,
+}: {
+  currency: string;
+  onClose: () => void;
+  onPick: (c: Customer) => void;
+}) {
+  const toast = useToast();
+  const [q, setQ] = useState("");
+  const [list, setList] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"search" | "new">("search");
+  const [newC, setNewC] = useState({ name: "", phone: "", address: "" });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setLoading(true);
+      apiGet<Customer[]>(`/customers${q.trim() ? `?search=${encodeURIComponent(q.trim())}` : ""}`)
+        .then((d) => setList(Array.isArray(d) ? d : []))
+        .catch(() => setList([]))
+        .finally(() => setLoading(false));
+    }, 180);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  async function createAndAttach() {
+    if (!newC.phone.trim()) { toast.push("bad", "Phone is required"); return; }
+    setBusy(true);
+    try {
+      const c = await apiPost<Customer>("/customers", newC);
+      onPick(c);
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed to create"); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Modal open title="Attach customer" onClose={onClose} width={560}>
+      <div className="flex gap-1.5 p-1 rounded-full mb-4" style={{ background: "var(--panel-2)" }}>
+        {(["search", "new"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)}
+            className="flex-1 py-1.5 rounded-full text-[12.5px] font-semibold capitalize transition-colors"
+            style={tab === t
+              ? { background: "var(--panel)", color: "var(--olive-700)", boxShadow: "var(--shadow-sm)" }
+              : { color: "var(--muted)" }}>
+            {t === "search" ? "Search existing" : "New customer"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "search" ? (
+        <>
+          <div className="relative mb-3">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              className="inp pl-9"
+              placeholder="Search by phone or name…"
+              value={q}
+              autoFocus
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+
+          <div className="max-h-[320px] overflow-y-auto -mx-1 px-1">
+            {loading ? (
+              <div className="py-10 text-center text-sm text-muted">Searching…</div>
+            ) : !list.length ? (
+              <div className="py-10 text-center text-sm text-muted">
+                {q ? "Nothing matched. Try “New customer” to create one." : "No customers yet. Add one with “New customer”."}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {list.map((c) => (
+                  <button key={c.id} onClick={() => onPick(c)}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
+                    style={{ background: "var(--panel-2)" }}>
+                    <span
+                      className="flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
+                      style={{ background: "var(--olive)" }}
+                    >
+                      {(c.name || c.phone).charAt(0).toUpperCase()}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[13.5px] text-ink truncate">
+                        {c.name || <span className="text-muted italic">(no name)</span>}
+                      </div>
+                      <div className="text-[11.5px] text-muted truncate">
+                        {c.phone}{c.address ? ` · ${c.address}` : ""}
+                      </div>
+                    </div>
+                    {c.loyaltyPoints && c.loyaltyPoints > 0 ? (
+                      <span className="pill pill-olive">
+                        {money(c.loyaltyPoints, "")} pts
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="lbl">Phone <span className="text-bad">*</span></label>
+            <input className="inp" value={newC.phone} autoFocus
+              onChange={(e) => setNewC({ ...newC, phone: e.target.value })} />
+          </div>
+          <div>
+            <label className="lbl">Name</label>
+            <input className="inp" value={newC.name}
+              onChange={(e) => setNewC({ ...newC, name: e.target.value })} />
+          </div>
+          <div>
+            <label className="lbl">Address (optional)</label>
+            <input className="inp" value={newC.address}
+              onChange={(e) => setNewC({ ...newC, address: e.target.value })} />
+          </div>
+          <button onClick={createAndAttach} disabled={busy} className="btn btn-primary w-full">
+            {busy ? "Saving…" : "Create & attach"}
+          </button>
+        </div>
+      )}
     </Modal>
   );
 }

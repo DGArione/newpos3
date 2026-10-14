@@ -76,4 +76,5 @@ export interface Order {
   createdAt?: string;
   readyAt?: string;
   source?: string;
+  voidData?: { reason?: string; byStaffName?: string; at?: string };
 }

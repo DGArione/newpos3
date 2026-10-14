@@ -8,6 +8,7 @@ import { useSettings, money } from "@/lib/settings";
 import { visibleNav } from "@/lib/nav";
 import { apiGet } from "@/lib/api";
 import { Screen } from "@/components/ui";
+import { Banners } from "@/components/Banners";
 
 interface DashSummary {
   totals?: {
@@ -45,6 +46,9 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Promotional banners (from Settings → Home banners) */}
+      <Banners banners={settings?.homeBanners} />
+
       {/* Hero / welcome */}
       <Screen className="relative overflow-hidden">
         <div className="relative z-10 flex flex-wrap items-end justify-between gap-5">

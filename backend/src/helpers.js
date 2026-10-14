@@ -351,6 +351,7 @@ function settingsRow(r) {
     qrOrderAutoKitchen: r.qrOrderAutoKitchen == null ? true : !!r.qrOrderAutoKitchen,
     defaultOrderType: r.defaultOrderType || 'dine-in',
     loginThemeId: r.loginThemeId || '',
+    homeBanners: jsonDecode(r.homeBanners, []) || [],
   });
 }
 function notifRow(r, userId) {

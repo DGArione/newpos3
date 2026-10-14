@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "./api";
 
+export interface HomeBanner {
+  title: string;
+  body: string;
+  color?: string;         // optional accent colour (CSS value) — overrides default
+  imageUrl?: string;      // optional image for the banner
+  ctaLabel?: string;      // optional button label (e.g. "Add to order")
+  ctaHref?: string;       // optional link target when button is clicked
+}
+
 export interface PublicSettings {
   businessName: string;
   businessTagline: string;
@@ -15,6 +24,7 @@ export interface PublicSettings {
   cardFeePercent: number;
   enabledAddons: string[];
   defaultOrderType: string;
+  homeBanners?: HomeBanner[];
 }
 
 let cache: PublicSettings | null = null;

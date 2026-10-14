@@ -292,6 +292,7 @@ function handle(ctx) {
       publicBaseUrl: s.publicBaseUrl || '', qrOrderAutoKitchen: s.qrOrderAutoKitchen !== false,
       defaultOrderType: s.defaultOrderType || 'dine-in',
       loginThemeId: s.loginThemeId || '',
+      homeBanners: s.homeBanners || [],
     });
   }
 
@@ -548,7 +549,12 @@ function handle(ctx) {
       'accentDark', 'accentSoft', 'font', 'currencySymbol', 'serviceChargeRate', 'vatRate', 'cardFeePercent', 'dateFormat',
       'lowStockDefaultThreshold', 'receiptFooterText', 'receiptShowVatBreakdown', 'notifyEmailEnabled',
       'notifySmsEnabled', 'loginLayout', 'loginBgUrl', 'autoStockClose', 'defaultOrderType', 'loginThemeId',
+      'homeBanners',
     ];
+    // Normalise homeBanners: accept an array and serialise it to JSON for the DB.
+    if (body && Array.isArray(body.homeBanners)) {
+      body = Object.assign({}, body, { homeBanners: JSON.stringify(body.homeBanners) });
+    }
     const [sets, vals] = buildSet(body, allowed);
     if (sets) db.prepare(`UPDATE settings SET ${sets} WHERE id=1`).execute(vals);
     jsonOut(getSettings(true));

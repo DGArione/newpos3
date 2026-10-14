@@ -1,83 +1,163 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Plus } from "lucide-react";
+import { FileText, Printer, FileCheck, Banknote, CreditCard, Wallet } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
-import { PageHeader, PageLoader, EmptyState, useToast, Modal } from "@/components/ui";
+import { PageHeader, PageLoader, EmptyState, Screen, useToast } from "@/components/ui";
 
-interface Z { id: number; fromDate: string; toDate: string; orderCount: number; grossSales: number; netSales: number; totalVat: number; totalServiceCharge: number; voidedCount: number; voidedTotal: number; generatedBy: string; createdAt: string; }
+interface Breakdown { cash?: number; card?: number; wallet?: number }
+interface ZReport {
+  id: number;
+  generatedBy: string;
+  fromDate: string;
+  toDate: string;
+  orderCount: number;
+  grossSales: number;
+  totalDiscounts: number;
+  totalServiceCharge: number;
+  totalVat: number;
+  netSales: number;
+  paymentBreakdown: Breakdown;
+  voidedCount: number;
+  voidedTotal: number;
+  generatedAt: string;
+}
+
+function todayStr() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 
 export default function ZReportPage() {
   const toast = useToast();
   const settings = useSettings();
   const currency = settings?.currencySymbol || "Rs. ";
-  const [list, setList] = useState<Z[]>([]);
+  const [list, setList] = useState<ZReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [latest, setLatest] = useState<ZReport | null>(null);
 
-  const load = () => apiGet<Z[]>("/zreports").then((d) => setList(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    setLoading(true);
+    apiGet<ZReport[]>("/zreports")
+      .then((d) => { setList(Array.isArray(d) ? d : []); if (Array.isArray(d) && d.length) setLatest(d[0]); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  async function runEOD() {
+    setRunning(true);
+    const t = todayStr();
+    try {
+      const z = await apiPost<ZReport>("/zreports", {
+        fromDate: `${t} 00:00:00`,
+        toDate: `${t} 23:59:59`,
+      });
+      setLatest(z);
+      load();
+      toast.push("ok", "Z-Report generated");
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
+    finally { setRunning(false); }
+  }
+
+  function printReport() {
+    window.print();
+  }
 
   return (
-    <div>
-      <PageHeader title="Z-Reports" subtitle="End-of-day sales close-outs.">
-        <button onClick={() => setOpen(true)} className="btn btn-primary btn-sm"><Plus size={15} /> Generate</button>
-      </PageHeader>
+    <div className="flex flex-col gap-3">
+      <Screen>
+        <PageHeader title="Z-Report" subtitle="End-of-day sales close" icon={FileText}>
+          <button onClick={runEOD} disabled={running} className="btn btn-primary btn-sm">
+            <FileCheck size={14} /> {running ? "Running…" : "Run today's Z-Report"}
+          </button>
+          {latest && (
+            <button onClick={printReport} className="btn btn-ghost btn-sm">
+              <Printer size={14} /> Print
+            </button>
+          )}
+        </PageHeader>
 
-      {loading ? <PageLoader /> : !list.length ? <EmptyState title="No Z-reports yet" hint="Generate one at the end of a trading day." icon={<FileText size={30} />} /> : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {list.map((z) => (
-            <div key={z.id} className="gb-card p-5">
-              <div className="flex justify-between items-start mb-3">
-                <div className="font-head text-lg">{z.fromDate}{z.toDate && z.toDate !== z.fromDate ? ` → ${z.toDate}` : ""}</div>
-                <span className="pill pill-olive">{z.orderCount} orders</span>
-              </div>
-              <div className="space-y-1 text-sm">
-                <Row l="Gross" v={money(z.grossSales, currency)} />
-                <Row l="Service" v={money(z.totalServiceCharge, currency)} />
-                <Row l="VAT" v={money(z.totalVat, currency)} />
-                <Row l="Voided" v={`${z.voidedCount} · ${money(z.voidedTotal, currency)}`} />
-                <div className="flex justify-between font-head text-base pt-1.5 border-t border-line-soft mt-1.5"><span>Net</span><span className="mono text-clay">{money(z.netSales, currency)}</span></div>
-              </div>
-              <div className="text-[11px] text-muted mt-3">by {z.generatedBy} · {(z.createdAt || "").slice(0, 10)}</div>
+        {latest && (
+          <div
+            className="rounded-xl p-5 mb-4"
+            style={{ background: "linear-gradient(135deg, var(--olive) 0%, var(--olive-700) 100%)", color: "#fff" }}
+          >
+            <div className="text-[11px] uppercase tracking-wider opacity-80">Latest Z-Report</div>
+            <div className="text-[12.5px] opacity-85 mt-1">
+              {latest.fromDate.replace("T", " ").slice(0, 16)} → {latest.toDate.replace("T", " ").slice(0, 16)}
             </div>
-          ))}
-        </div>
-      )}
+            <div className="mono text-[32px] font-semibold mt-3">{money(latest.netSales, currency)}</div>
+            <div className="text-[12.5px] opacity-80">
+              {latest.orderCount} orders · {latest.voidedCount} cancelled ({money(latest.voidedTotal, currency)})
+            </div>
 
-      {open && <GenerateModal onClose={() => setOpen(false)} onDone={() => { setOpen(false); setLoading(true); load(); toast.push("ok", "Z-report generated"); }} />}
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <PBTile icon={<Banknote size={14} />}   label="Cash"   value={money(latest.paymentBreakdown?.cash || 0, currency)} />
+              <PBTile icon={<CreditCard size={14} />} label="Card"   value={money(latest.paymentBreakdown?.card || 0, currency)} />
+              <PBTile icon={<Wallet size={14} />}     label="Wallet" value={money(latest.paymentBreakdown?.wallet || 0, currency)} />
+            </div>
+
+            <div className="grid grid-cols-4 gap-3 mt-4 text-[12px]">
+              <ZLine label="Gross"    value={money(latest.grossSales, currency)} />
+              <ZLine label="Discount" value={`−${money(latest.totalDiscounts, currency)}`} />
+              <ZLine label="Service"  value={money(latest.totalServiceCharge, currency)} />
+              <ZLine label="VAT"      value={money(latest.totalVat, currency)} />
+            </div>
+          </div>
+        )}
+      </Screen>
+
+      <Screen>
+        <h2 className="text-[15px] font-semibold text-ink mb-4">Past reports</h2>
+        {loading ? <PageLoader /> : !list.length ? (
+          <EmptyState title="No reports yet" hint="Run the first Z-Report with the button above." icon={<FileText size={30} />} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted text-[11px] uppercase tracking-wider font-semibold">
+                  <th className="py-2.5">When</th>
+                  <th>By</th>
+                  <th>Orders</th>
+                  <th className="text-right pr-4">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((z) => (
+                  <tr key={z.id} className="border-t border-line-soft cursor-pointer hover:bg-panel-2" onClick={() => setLatest(z)}>
+                    <td className="py-3">{(z.generatedAt || "").replace("T", " ").slice(0, 16)}</td>
+                    <td>{z.generatedBy}</td>
+                    <td className="mono">{z.orderCount}</td>
+                    <td className="text-right pr-4 mono font-semibold" style={{ color: "var(--olive-700)" }}>
+                      {money(z.netSales, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Screen>
     </div>
   );
 }
 
-function Row({ l, v }: { l: string; v: string }) { return <div className="flex justify-between text-muted"><span>{l}</span><span className="mono">{v}</span></div>; }
-
-function GenerateModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [fromDate, setFrom] = useState(today);
-  const [toDate, setTo] = useState(today);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  async function gen() {
-    setBusy(true); setErr("");
-    try {
-      // backend treats toDate as exclusive upper bound — add a day
-      const to = new Date(new Date(toDate).getTime() + 86400000).toISOString().slice(0, 10);
-      await apiPost("/zreports", { fromDate, toDate: to });
-      onDone();
-    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); } finally { setBusy(false); }
-  }
+function PBTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <Modal open title="Generate Z-Report" onClose={onClose}>
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="lbl">From</label><input type="date" className="inp" value={fromDate} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><label className="lbl">To</label><input type="date" className="inp" value={toDate} onChange={(e) => setTo(e.target.value)} /></div>
-        </div>
-        {err && <div className="text-sm text-bad">{err}</div>}
-        <button onClick={gen} disabled={busy} className="btn btn-primary w-full">Generate report</button>
+    <div className="rounded-xl p-3" style={{ background: "rgba(255,255,255,.12)" }}>
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider opacity-85">
+        {icon} {label}
       </div>
-    </Modal>
+      <div className="mono text-[16px] font-semibold mt-1">{value}</div>
+    </div>
+  );
+}
+
+function ZLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="opacity-70 text-[10px] uppercase tracking-wider">{label}</div>
+      <div className="mono font-semibold mt-0.5">{value}</div>
+    </div>
   );
 }
