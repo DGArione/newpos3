@@ -6,10 +6,10 @@ import { apiGet } from "./api";
 export interface HomeBanner {
   title: string;
   body: string;
-  color?: string;         // optional accent colour (CSS value) — overrides default
-  imageUrl?: string;      // optional image for the banner
-  ctaLabel?: string;      // optional button label (e.g. "Add to order")
-  ctaHref?: string;       // optional link target when button is clicked
+  color?: string;
+  imageUrl?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
 }
 
 export interface PublicSettings {
@@ -18,6 +18,7 @@ export interface PublicSettings {
   businessAddress: string;
   businessPhone: string;
   logoUrl: string;
+  loginBgUrl?: string;
   currencySymbol: string;
   serviceChargeRate: number;
   vatRate: number;
@@ -28,20 +29,26 @@ export interface PublicSettings {
 }
 
 let cache: PublicSettings | null = null;
+const listeners = new Set<(s: PublicSettings) => void>();
 
-export async function fetchSettings(): Promise<PublicSettings> {
-  if (cache) return cache;
+export async function fetchSettings(force = false): Promise<PublicSettings> {
+  if (cache && !force) return cache;
   const s = await apiGet<PublicSettings>("/public/settings");
   cache = s;
+  listeners.forEach((fn) => { try { fn(s); } catch {} });
   return s;
 }
+
+export function clearSettingsCache() { cache = null; }
 
 export function useSettings() {
   const [settings, setSettings] = useState<PublicSettings | null>(cache);
   useEffect(() => {
     let alive = true;
     fetchSettings().then((s) => alive && setSettings(s)).catch(() => {});
-    return () => { alive = false; };
+    const fn = (s: PublicSettings) => { if (alive) setSettings(s); };
+    listeners.add(fn);
+    return () => { alive = false; listeners.delete(fn); };
   }, []);
   return settings;
 }

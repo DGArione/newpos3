@@ -567,8 +567,8 @@ function handle(ctx) {
   }
   if (method === 'POST' && uri === '/branches') {
     requireRole(['superManager'], user);
-    db.prepare('INSERT INTO branches (name,address,phone) VALUES (?,?,?)')
-      .execute([truncate(body.name || 'New Branch', 200), truncate(body.address || '', 500), truncate(body.phone || '', 50)]);
+    db.prepare('INSERT INTO branches (name,address,phone,imageUrl) VALUES (?,?,?,?)')
+      .execute([truncate(body.name || 'New Branch', 200), truncate(body.address || '', 500), truncate(body.phone || '', 50), truncate(body.imageUrl || '', 500000)]);
     const id = db.lastInsertId();
     db.prepare('INSERT OR IGNORE INTO permissions (branchId) VALUES (?)').execute([id]);
     const f = db.prepare('SELECT * FROM branches WHERE id=?'); f.execute([id]);
@@ -578,7 +578,7 @@ function handle(ctx) {
     const bId = int(params.id);
     if (method === 'PATCH' || method === 'PUT') {
       requireRole(['superManager'], user);
-      const [sets, vals] = buildSet(body, ['name', 'address', 'phone', 'status']);
+      const [sets, vals] = buildSet(body, ['name', 'address', 'phone', 'status', 'imageUrl']);
       if (sets) db.prepare(`UPDATE branches SET ${sets} WHERE id=?`).execute([...vals, bId]);
       const f = db.prepare('SELECT * FROM branches WHERE id=?'); f.execute([bId]);
       jsonOut(f.fetch());
@@ -764,7 +764,14 @@ function handle(ctx) {
     const mId = int(params.id);
     if (method === 'PUT') {
       requireRole(['superManager', 'manager'], user);
-      const [sets, vals] = buildSet(body, ['name', 'price', 'category', 'plu', 'imageUrl', 'stationId', 'soldOut', 'tags']);
+      // Serialise modifiers + recipe to JSON for the DB.
+      if (body && Array.isArray(body.modifiers)) {
+        body = Object.assign({}, body, { modifiers: JSON.stringify(body.modifiers) });
+      }
+      if (body && Array.isArray(body.recipe)) {
+        body = Object.assign({}, body, { recipe: JSON.stringify(body.recipe) });
+      }
+      const [sets, vals] = buildSet(body, ['name', 'price', 'category', 'plu', 'imageUrl', 'stationId', 'soldOut', 'tags', 'modifiers', 'recipe']);
       if (sets) db.prepare(`UPDATE menu_items SET ${sets} WHERE id=?`).execute([...vals, mId]);
       const f = db.prepare('SELECT * FROM menu_items WHERE id=?'); f.execute([mId]);
       jsonOut(menuRow(f.fetch()));

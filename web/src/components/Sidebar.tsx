@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useSettings } from "@/lib/settings";
-import { visibleNav } from "@/lib/nav";
+import { visibleNav, groupedNav } from "@/lib/nav";
 
-// Module accent colours — mirrors the golden POS nav palette.
+// Module accent colours.
 const MODULE_COLOR: Record<string, string> = {
   dashboard:    "var(--olive)",
   branches:     "#5b88fc",
@@ -19,6 +19,8 @@ const MODULE_COLOR: Record<string, string> = {
   payment:      "var(--olive)",
   menuadmin:    "#d9772b",
   inventory:    "#35c344",
+  suppliers:    "#5b88fc",
+  purchases:    "#9d61e8",
   history:      "#5b88fc",
   reports:      "#9d61e8",
   timeclock:    "#5b88fc",
@@ -33,6 +35,8 @@ const MODULE_COLOR: Record<string, string> = {
   giftcards:    "#f52121",
   promotions:   "#d9772b",
   reservations: "#5b88fc",
+  admin:        "#f52121",
+  profile:      "#7471f6",
   settings:     "#515151",
 };
 
@@ -46,8 +50,8 @@ export function Sidebar({ onLock }: { onLock?: () => void }) {
 
   if (!user) return null;
   const items = visibleNav(user.role, settings?.enabledAddons || []);
+  const groups = groupedNav(items);
 
-  // width & visibility helpers
   const width   = mode === "expanded" ? "w-60"      : mode === "collapsed" ? "w-[76px]" : "w-[76px] xl:w-60";
   const center  = mode === "expanded" ? "justify-start" : mode === "collapsed" ? "justify-center" : "justify-center xl:justify-start";
   const wide    = mode === "expanded" ? "flex"   : mode === "collapsed" ? "hidden"   : "hidden xl:flex";
@@ -79,7 +83,6 @@ export function Sidebar({ onLock }: { onLock?: () => void }) {
     >
       {/* ---- Brand + toggle ---- */}
       <div className={`flex items-center gap-2 px-4 ${center}`}>
-        {/* logo mark */}
         <span
           className="flex size-8 shrink-0 items-center justify-center rounded-xl text-white font-bold text-[13px]"
           style={{ background: "var(--olive)" }}
@@ -98,7 +101,6 @@ export function Sidebar({ onLock }: { onLock?: () => void }) {
         </button>
       </div>
 
-      {/* narrow expand button */}
       <button
         onClick={toggle}
         aria-label="Expand menu"
@@ -107,49 +109,43 @@ export function Sidebar({ onLock }: { onLock?: () => void }) {
         <PanelLeftOpen size={17} />
       </button>
 
-      {/* ---- Nav label ---- */}
-      <p className={`mb-1 mt-5 px-5 text-[11px] font-semibold uppercase tracking-wider text-muted ${wideBlk}`}>
-        Menu
-      </p>
-
-      {/* ---- Nav items ---- */}
-      <nav className="scroll-thin mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3">
-        {items.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
-          const color = MODULE_COLOR[item.key] || "var(--olive)";
-
-          return (
-            <Link
-              key={item.key}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              title={item.label}
-              className={`relative flex h-11 shrink-0 items-center gap-3 rounded-xl px-2 text-[13px] font-medium transition-colors ${center} ${
-                active
-                  ? "text-white"
-                  : "text-muted hover:bg-panel-2 hover:text-ink"
-              }`}
-              style={active ? { background: "var(--olive)", boxShadow: `0 4px 14px -4px color-mix(in srgb, var(--olive) 60%, transparent)` } : {}}
-            >
-              {/* icon tile */}
-              <span
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg"
-                style={{
-                  background: active
-                    ? "rgba(255,255,255,0.22)"
-                    : `color-mix(in srgb, ${color} 12%, transparent)`,
-                  color: active ? "#fff" : color,
-                }}
-              >
-                <Icon size={15} strokeWidth={2.2} />
-              </span>
-
-              {/* label */}
-              <span className={`flex-1 leading-none ${wideInl}`}>{item.label}</span>
-            </Link>
-          );
-        })}
+      {/* ---- Nav sections ---- */}
+      <nav className="scroll-thin mt-4 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3">
+        {groups.map(({ section, items: sectionItems }) => (
+          <div key={section} className="mb-2">
+            <p className={`mb-1 mt-2 px-2 text-[10px] font-bold uppercase tracking-wider text-muted ${wideBlk}`}>
+              {section}
+            </p>
+            {sectionItems.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const Icon = item.icon;
+              const color = MODULE_COLOR[item.key] || "var(--olive)";
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  title={item.label}
+                  className={`relative flex h-10 shrink-0 items-center gap-3 rounded-xl px-2 text-[13px] font-medium transition-colors ${center} ${
+                    active ? "text-white" : "text-muted hover:bg-panel-2 hover:text-ink"
+                  }`}
+                  style={active ? { background: "var(--olive)", boxShadow: `0 4px 14px -4px color-mix(in srgb, var(--olive) 60%, transparent)` } : {}}
+                >
+                  <span
+                    className="flex size-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{
+                      background: active ? "rgba(255,255,255,0.22)" : `color-mix(in srgb, ${color} 12%, transparent)`,
+                      color: active ? "#fff" : color,
+                    }}
+                  >
+                    <Icon size={14} strokeWidth={2.2} />
+                  </span>
+                  <span className={`flex-1 leading-none ${wideInl}`}>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* ---- Terminal / lock ---- */}

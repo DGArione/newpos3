@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Flame, Check, CookingPot, Timer, RefreshCw, ChefHat,
-  Ban, History, X as XIcon,
+  Ban, History, X as XIcon, CheckCheck,
 } from "lucide-react";
+import Link from "next/link";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { Order, Station } from "@/lib/types";
 import { PageHeader, PageLoader, EmptyState, useToast, Modal } from "@/components/ui";
@@ -92,6 +93,25 @@ export default function KitchenPage() {
   return (
     <div>
       <PageHeader title="Kitchen" subtitle="Live tickets — bump items as they leave the pass." icon={ChefHat}>
+        {view === "active" && shown.length > 0 && (
+          <button
+            onClick={async () => {
+              if (!confirm(`Mark all ${shown.length} tickets ready?`)) return;
+              try {
+                await Promise.all(shown.map((o) => apiPatch(`/orders/${o.id}/status`, { status: "ready" })));
+                toast.push("ok", `All ${shown.length} marked ready`);
+                load();
+              } catch { toast.push("bad", "Some tickets failed"); }
+            }}
+            className="btn btn-soft btn-sm"
+            title="Mark every visible ticket ready"
+          >
+            <CheckCheck size={14} /> All ready
+          </button>
+        )}
+        <Link href="/menu-admin" className="btn btn-ghost btn-sm" title="Manage kitchen stations">
+          <Flame size={14} /> Stations
+        </Link>
         <button onClick={load} className="btn btn-ghost btn-sm"><RefreshCw size={14} /> Refresh</button>
       </PageHeader>
 

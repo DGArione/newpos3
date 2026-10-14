@@ -71,7 +71,7 @@ function PaymentInner() {
 
   return (
     <div>
-      <PageHeader title="Payment" subtitle="Settle open tickets — cash, card, or split.">
+      <PageHeader title="Payment" subtitle="Settle open tickets — cash, card, or split" icon={CreditCard}>
         <button onClick={() => load()} className="btn btn-ghost btn-sm"><RefreshCw size={14} /> Refresh</button>
       </PageHeader>
 

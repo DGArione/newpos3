@@ -23,6 +23,7 @@ export interface TableRow {
   seats: number;
   status: string; // open | ordered | reserved | ...
   qrToken?: string;
+  floor?: string;
 }
 
 export interface CartModifier { group: string; option: string; priceDelta: number; }

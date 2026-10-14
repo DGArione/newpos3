@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Save, Star, Gift, Tag, CalendarCheck, Image as ImageIcon, Plus, Trash2 } from "lucide-react";
 import { apiGet, apiPut, apiPost } from "@/lib/api";
 import { PageHeader, PageLoader, Screen, useToast } from "@/components/ui";
-import type { HomeBanner } from "@/lib/settings";
+import { fetchSettings, type HomeBanner } from "@/lib/settings";
 
 interface Settings {
   businessName: string;
@@ -61,6 +61,7 @@ export default function SettingsPage() {
         receiptFooterText: s.receiptFooterText,
         homeBanners: s.homeBanners || [],
       });
+      await savedAndRefresh();
       toast.push("ok", "Settings saved");
     } catch (e) {
       toast.push("bad", e instanceof Error ? e.message : "Save failed");
@@ -73,10 +74,16 @@ export default function SettingsPage() {
     try {
       const r = await apiPost<{ enabledAddons: string[] }>("/admin/addons", { addon: key, enabled });
       set("enabledAddons", r.enabledAddons);
+      // Refresh the global settings cache so the Sidebar reacts instantly.
+      await fetchSettings(true);
       toast.push("ok", `${key} ${enabled ? "enabled" : "disabled"}`);
     } catch (e) {
       toast.push("bad", e instanceof Error ? e.message : "Failed");
     }
+  }
+
+  async function savedAndRefresh() {
+    await fetchSettings(true);
   }
 
   function addBanner() {

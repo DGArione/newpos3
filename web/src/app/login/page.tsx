@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Delete, ArrowRight, KeyRound } from "lucide-react";
+import { Delete, ArrowRight, KeyRound, Hash, Monitor, Wifi, Loader2 } from "lucide-react";
 import { api, SessionUser } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSettings } from "@/lib/settings";
-import { Wordmark, LogoMark } from "@/components/Logo";
 import { Spinner } from "@/components/ui";
+
+const KEYS = ["1","2","3","4","5","6","7","8","9","clear","0","back"] as const;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,8 +20,49 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [clock, setClock] = useState<Date>(() => new Date());
+  const [hasAdmin, setHasAdmin] = useState<boolean | null>(null);
+  const [newAdmin, setNewAdmin] = useState({ name: "Administrator", username: "admin", password: "" });
 
   useEffect(() => { if (user) router.replace("/"); }, [user, router]);
+
+  // Detect first-install: no admin user yet.
+  useEffect(() => {
+    api<{ hasAdmin: boolean }>("/public/has-admin", { noAuthRedirect: true })
+      .then((d) => setHasAdmin(!!d.hasAdmin))
+      .catch(() => setHasAdmin(true));
+  }, []);
+
+  async function createAdmin() {
+    if (newAdmin.password.length < 8) { setError("Admin password must be at least 8 characters"); return; }
+    setBusy(true); setError("");
+    try {
+      await api("/public/create-admin", {
+        method: "POST",
+        json: {
+          name: newAdmin.name,
+          username: newAdmin.username,
+          password: newAdmin.password,
+        },
+        noAuthRedirect: true,
+      });
+      setHasAdmin(true);
+      setMode("password");
+      setUsername(newAdmin.username);
+      setPassword(newAdmin.password);
+      // Try to sign in automatically.
+      const u = await api<SessionUser>("/auth/login-password", {
+        method: "POST",
+        json: { username: newAdmin.username, password: newAdmin.password },
+        noAuthRedirect: true,
+      });
+      login(u);
+      router.replace("/settings");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create admin");
+    } finally { setBusy(false); }
+  }
+  useEffect(() => { const i = setInterval(() => setClock(new Date()), 15000); return () => clearInterval(i); }, []);
 
   const press = (d: string) => { setError(""); setPin((p) => (p.length >= 8 ? p : p + d)); };
   const back = () => setPin((p) => p.slice(0, -1));
@@ -44,9 +86,8 @@ export default function LoginPage() {
       const u = await api<SessionUser>("/auth/login-password", { method: "POST", json: { username, password }, noAuthRedirect: true });
       login(u);
       router.replace(u.role === "admin" ? "/settings" : "/");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Login failed");
-    } finally { setBusy(false); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Login failed"); }
+    finally { setBusy(false); }
   }
 
   useEffect(() => {
@@ -61,65 +102,135 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, pin]);
 
+  const brandName = settings?.businessName || "Golden Beach";
+  const tagline = settings?.businessTagline || "Fresh. Local. Golden.";
+  const loginBg = (settings as unknown as { loginBgUrl?: string })?.loginBgUrl || "";
+  const loginImg = (settings as unknown as { logoUrl?: string })?.logoUrl || "";
+
+  const timeStr = clock.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const dateStr = clock.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+
   return (
     <div
-      className="min-h-screen grid md:grid-cols-[1.1fr_1fr]"
-      style={{ background: "var(--paper)" }}
+      className="relative isolate flex min-h-screen flex-col items-center justify-center p-4"
+      style={{ background: loginBg ? "transparent" : "var(--paper)" }}
     >
-      {/* Brand panel */}
+      {/* ---- Full-screen background image + dark overlay ---- */}
+      {loginBg && (
+        <>
+          <img
+            src={loginBg}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 -z-10 w-full h-full object-cover"
+          />
+          <span aria-hidden="true" className="absolute inset-0 -z-10" style={{ background: "rgba(20,20,20,0.55)" }} />
+        </>
+      )}
+
+      {/* ---- Login card: 2 columns (brand sidebar + form) ---- */}
       <div
-        className="relative hidden md:flex flex-col justify-between p-12 text-white overflow-hidden"
-        style={{ background: "linear-gradient(135deg, var(--olive) 0%, var(--olive-700) 100%)" }}
+        className="grid w-full max-w-[780px] overflow-hidden rounded-2xl md:grid-cols-[300px_1fr]"
+        style={{ background: "var(--panel)", boxShadow: "0 20px 50px -24px rgba(0,0,0,.35)" }}
       >
-        <div className="flex items-center gap-3 relative z-10">
-          <div
-            className="flex size-11 items-center justify-center rounded-2xl text-[16px] font-bold"
-            style={{ background: "rgba(255,255,255,.18)", backdropFilter: "blur(8px)" }}
-          >
-            GB
-          </div>
-          <span className="font-semibold tracking-wider text-xs uppercase opacity-95">
-            Golden Beach
-          </span>
-        </div>
+        {/* ---- Left: brand panel with optional inside picture ---- */}
+        <aside
+          className="relative flex flex-col overflow-hidden p-6 text-white min-h-[320px]"
+          style={{ background: "var(--olive)" }}
+        >
+          {loginImg ? (
+            <>
+              <img
+                src={loginImg}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <span
+                aria-hidden="true"
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(to bottom, color-mix(in srgb, var(--olive) 85%, transparent), color-mix(in srgb, var(--olive) 35%, transparent), rgba(30,30,30,0.8))",
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <span aria-hidden="true" className="absolute -right-16 -top-16 size-48 rounded-full" style={{ background: "rgba(255,255,255,.1)" }} />
+              <span aria-hidden="true" className="absolute -bottom-20 -left-10 size-56 rounded-full" style={{ background: "rgba(255,255,255,.1)" }} />
+            </>
+          )}
 
-        <div className="relative z-10">
-          <h2 className="text-[42px] leading-[1.08] font-semibold">
-            Good food,<br />
-            <span style={{ color: "rgba(255,255,255,.75)" }}>golden hours.</span>
-          </h2>
-          <p className="mt-5 max-w-sm text-[14px] leading-relaxed opacity-85">
-            {settings?.businessAddress || "Midigama, Sri Lanka"} &mdash; point of sale for the whole
-            house: orders, kitchen, floor, payments and the books.
-          </p>
-        </div>
-
-        <div className="text-xs opacity-70 tracking-wide relative z-10">
-          {settings?.businessName || "Golden Beach Restaurant"} · v2.0
-        </div>
-
-        {/* decorative circles */}
-        <div
-          className="absolute -right-20 -top-20 h-72 w-72 rounded-full"
-          style={{ background: "rgba(255,255,255,.08)" }}
-          aria-hidden="true"
-        />
-        <div
-          className="absolute -right-40 bottom-10 h-96 w-96 rounded-full"
-          style={{ background: "rgba(255,255,255,.05)" }}
-          aria-hidden="true"
-        />
-      </div>
-
-      {/* Form panel */}
-      <div className="flex items-center justify-center p-6">
-        <div className="w-full max-w-sm">
-          <div className="md:hidden mb-8 flex justify-center">
-            <Wordmark />
+          {/* brand */}
+          <div className="relative flex items-center gap-2.5">
+            <div
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl text-[16px] font-bold"
+              style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)" }}
+            >
+              GB
+            </div>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[16px] font-semibold text-white">{brandName}</p>
+              {tagline && <p className="truncate text-[12px] text-white/85">{tagline}</p>}
+            </div>
           </div>
 
-          <h1 className="text-[24px] font-semibold text-ink">Welcome back</h1>
-          <p className="text-sm text-muted mt-1 mb-7">
+          {/* clock */}
+          <div className="relative mt-8 hidden md:block">
+            <div className="mono text-[36px] font-semibold leading-none text-white">{timeStr}</div>
+            <div className="mt-1.5 text-[12.5px] opacity-90">{dateStr}</div>
+          </div>
+
+          {/* terminal info at bottom */}
+          <dl className="relative mt-auto hidden md:block space-y-2 pt-6 text-[12px]">
+            <div className="flex items-center gap-2">
+              <Monitor size={14} className="opacity-80" />
+              <dt className="opacity-80">Terminal</dt>
+              <dd className="ml-auto font-semibold">Front counter</dd>
+            </div>
+            <div className="flex items-center gap-2">
+              <Wifi size={14} className="opacity-80" />
+              <dt className="opacity-80">Server</dt>
+              <dd className="ml-auto font-semibold">Connected</dd>
+            </div>
+          </dl>
+        </aside>
+
+        {/* ---- Right: form ---- */}
+        <main className="p-7">
+          {hasAdmin === false ? (
+            <>
+              <h1 className="text-[22px] font-semibold text-ink">Set up administrator</h1>
+              <p className="text-[13px] text-muted mt-1 mb-5">
+                No administrator account exists yet. Pick a username and password now — you'll be able to add staff
+                PINs, change this later and configure the restaurant from inside.
+              </p>
+              <div className="space-y-3">
+                <div><label className="lbl">Name</label>
+                  <input className="inp" value={newAdmin.name}
+                    onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })} /></div>
+                <div><label className="lbl">Username</label>
+                  <input className="inp" value={newAdmin.username} autoFocus
+                    onChange={(e) => setNewAdmin({ ...newAdmin, username: e.target.value })} /></div>
+                <div><label className="lbl">Password (8+ characters)</label>
+                  <input type="password" className="inp" value={newAdmin.password}
+                    onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })} /></div>
+                <button onClick={createAdmin} disabled={busy || newAdmin.password.length < 8}
+                  className="btn btn-primary w-full btn-lg">
+                  {busy ? "Creating…" : "Create admin & sign in"}
+                </button>
+                {error && (
+                  <div className="text-sm text-center rounded-lg py-2 px-3" style={{ background: "var(--bad-wash)", color: "var(--bad)" }}>
+                    {error}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+          <>
+          <h1 className="text-[22px] font-semibold text-ink">Welcome back</h1>
+          <p className="text-[13px] text-muted mt-1 mb-5">
             {mode === "pin"
               ? "Enter your staff PIN to clock in."
               : "Sign in with your username and password."}
@@ -128,73 +239,57 @@ export default function LoginPage() {
           {mode === "pin" ? (
             <>
               {/* PIN dots */}
-              <div className="flex justify-center gap-2.5 mb-6 h-5">
+              <div className="flex justify-center gap-2 mb-5 h-4">
                 {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
                   <span
                     key={i}
-                    className="w-3 h-3 rounded-full transition-colors"
+                    className="w-2.5 h-2.5 rounded-full transition-colors"
                     style={{ background: i < pin.length ? "var(--olive)" : "var(--line)" }}
                   />
                 ))}
               </div>
 
-              {/* Keypad */}
-              <div className="grid grid-cols-3 gap-2.5">
-                {["1","2","3","4","5","6","7","8","9"].map((d) => (
+              {/* Keypad 3x4 */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {KEYS.map((k) => (
                   <button
-                    key={d}
-                    onClick={() => press(d)}
-                    className="py-4 text-xl font-semibold rounded-xl transition active:scale-95"
-                    style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--ink)" }}
+                    key={k}
+                    onClick={() => k === "back" ? back() : k === "clear" ? setPin("") : press(k)}
+                    className="h-[54px] rounded-lg text-[18px] font-semibold transition active:scale-95"
+                    style={{
+                      background: k === "back" || k === "clear" ? "var(--panel)" : "var(--panel-2)",
+                      color: k === "back" || k === "clear" ? "var(--muted)" : "var(--ink)",
+                      border: "1px solid var(--line)",
+                      fontSize: k === "back" || k === "clear" ? 13 : 18,
+                    }}
                   >
-                    {d}
+                    {k === "back" ? <Delete size={18} className="mx-auto" /> : k === "clear" ? "CLR" : k}
                   </button>
                 ))}
-                <button
-                  onClick={back}
-                  className="py-4 flex items-center justify-center rounded-xl transition active:scale-95"
-                  style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--muted)" }}
-                >
-                  <Delete size={20} />
-                </button>
-                <button
-                  onClick={() => press("0")}
-                  className="py-4 text-xl font-semibold rounded-xl transition active:scale-95"
-                  style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--ink)" }}
-                >
-                  0
-                </button>
-                <button
-                  onClick={submitPin}
-                  disabled={busy}
-                  className="btn btn-primary rounded-xl text-white"
-                  style={{ padding: 0 }}
-                >
-                  {busy ? <Spinner /> : <ArrowRight size={20} />}
-                </button>
               </div>
+
+              <button
+                onClick={submitPin}
+                disabled={busy || pin.length < 3}
+                className="btn btn-primary w-full mt-3 h-12 text-[15px]"
+              >
+                {busy ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                {busy ? "Signing in…" : "Sign in"}
+              </button>
             </>
           ) : (
             <div className="flex flex-col gap-3">
               <div>
                 <label className="lbl">Username</label>
-                <input
-                  className="inp"
-                  value={username}
-                  autoFocus
+                <input className="inp" value={username} autoFocus
                   onChange={(e) => setUsername(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submitPassword()}
-                />
+                  onKeyDown={(e) => e.key === "Enter" && submitPassword()} />
               </div>
               <div>
                 <label className="lbl">Password</label>
-                <input
-                  className="inp"
-                  type="password"
-                  value={password}
+                <input className="inp" type="password" value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submitPassword()}
-                />
+                  onKeyDown={(e) => e.key === "Enter" && submitPassword()} />
               </div>
               <button onClick={submitPassword} disabled={busy} className="btn btn-primary btn-lg mt-1">
                 {busy ? <Spinner /> : "Sign in"}
@@ -204,7 +299,7 @@ export default function LoginPage() {
 
           {error && (
             <div
-              className="mt-4 text-sm text-center rounded-lg py-2 px-3"
+              className="mt-3 text-sm text-center rounded-lg py-2 px-3"
               style={{ background: "var(--bad-wash)", color: "var(--bad)" }}
             >
               {error}
@@ -213,13 +308,23 @@ export default function LoginPage() {
 
           <button
             onClick={() => { setMode((m) => (m === "pin" ? "password" : "pin")); setError(""); }}
-            className="mt-7 w-full flex items-center justify-center gap-2 text-sm text-muted hover:text-ink transition"
+            className="mt-5 w-full flex items-center justify-center gap-2 text-sm text-muted hover:text-ink transition"
           >
             <KeyRound size={15} />
             {mode === "pin" ? "Sign in with username & password" : "Use a staff PIN instead"}
           </button>
-        </div>
+          </>
+          )}
+        </main>
       </div>
+
+      {/* footer */}
+      <p
+        className={`mt-4 text-[12px] ${loginBg ? "text-white/90" : "text-muted"}`}
+        style={loginBg ? { textShadow: "0 1px 2px rgba(0,0,0,0.5)" } : {}}
+      >
+        {brandName} POS v2.1 · developed by Rapid Solutions
+      </p>
     </div>
   );
 }

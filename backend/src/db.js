@@ -432,6 +432,8 @@ function migrate() {
   addCol('settings', 'lastAutoStockCloseMonth', 'TEXT DEFAULT NULL');
   // Golden POS home banners (JSON array of {title, body, color?, imageUrl?, menuItemId?}).
   addCol('settings', 'homeBanners', "TEXT DEFAULT '[]'");
+  // Branch photo for the branch picker / page.
+  addCol('branches', 'imageUrl', "TEXT DEFAULT ''");
   // Separate approval PIN for managers (used to authorise discounts/voids/
   // refunds), kept distinct from the login PIN.
   addCol('users', 'approvalPin', 'TEXT DEFAULT NULL');

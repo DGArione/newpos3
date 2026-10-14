@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { History as HistoryIcon, Search, Receipt, RefreshCw, X } from "lucide-react";
+import { History as HistoryIcon, Search, Receipt, RefreshCw, X, Printer } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
@@ -174,11 +174,16 @@ function OrderDetail({ order, currency, onClose, onRefund }: { order: Order; cur
         <TotalLine label="Total" value={money(order.grandTotal || order.total, currency)} big />
       </div>
 
-      {order.status !== "voided" && order.paymentStatus === "paid" && (
-        <button onClick={onRefund} className="btn btn-danger w-full mt-4">
-          <X size={15} /> Refund order
+      <div className="flex gap-2 mt-4">
+        <button onClick={() => printReceipt(order, currency)} className="btn btn-ghost flex-1">
+          <Printer size={14} /> Reprint receipt
         </button>
-      )}
+        {order.status !== "voided" && order.paymentStatus === "paid" && (
+          <button onClick={onRefund} className="btn btn-danger flex-1">
+            <X size={15} /> Refund
+          </button>
+        )}
+      </div>
       {order.status === "voided" && order.voidData && (
         <div className="mt-4 rounded-lg p-3 text-[12.5px]" style={{ background: "var(--bad-wash)", color: "var(--bad)" }}>
           Cancelled by {order.voidData.byStaffName || "staff"}
@@ -201,4 +206,44 @@ function TotalLine({ label, value, big, warn }: { label: string; value: string; 
       </span>
     </div>
   );
+}
+
+/** Open a print-friendly receipt window and send to printer. */
+function printReceipt(o: Order, currency: string) {
+  const win = window.open("", "_blank", "width=380,height=640");
+  if (!win) { alert("Pop-up blocked. Allow pop-ups to print."); return; }
+  const lines = o.items.map((it) =>
+    `<tr><td>${it.qty}×</td><td>${escapeHtml(it.name)}</td><td style="text-align:right">${currency}${(it.lineTotal).toFixed(2)}</td></tr>` +
+    (it.modifiers?.map((m) => `<tr><td></td><td colspan="2" style="padding-left:16px;color:#777;font-size:11px">+ ${escapeHtml(m.option)}</td></tr>`).join("") || "")
+  ).join("");
+  const html = `<!doctype html><html><head><title>${o.displayNum}</title>
+    <style>
+      body { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; margin: 10px; }
+      h2 { text-align: center; margin: 4px 0; font-size: 16px; }
+      .m { text-align: center; font-size: 11px; color: #555; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      td { padding: 2px 0; vertical-align: top; }
+      .totals td { border-top: 1px dashed #999; padding-top: 4px; }
+      .big { font-size: 16px; font-weight: 700; border-top: 2px solid #000; padding-top: 4px; }
+    </style></head><body>
+    <h2>${escapeHtml(o.displayNum)}</h2>
+    <div class="m">${escapeHtml(o.tableName || "")}${o.customerName ? " · " + escapeHtml(o.customerName) : ""}</div>
+    <div class="m">${(o.createdAt || "").replace("T", " ")}</div>
+    <table>${lines}</table>
+    <table class="totals">
+      <tr><td>Subtotal</td><td style="text-align:right">${currency}${o.subtotal.toFixed(2)}</td></tr>
+      ${o.discount > 0 ? `<tr><td>Discount</td><td style="text-align:right">−${currency}${o.discount.toFixed(2)}</td></tr>` : ""}
+      ${o.serviceCharge > 0 ? `<tr><td>Service</td><td style="text-align:right">${currency}${o.serviceCharge.toFixed(2)}</td></tr>` : ""}
+      ${o.vat > 0 ? `<tr><td>VAT</td><td style="text-align:right">${currency}${o.vat.toFixed(2)}</td></tr>` : ""}
+      <tr class="big"><td>Total</td><td style="text-align:right">${currency}${(o.grandTotal || o.total).toFixed(2)}</td></tr>
+    </table>
+    <p class="m" style="margin-top:20px">Thank you!</p>
+    <script>window.onload=()=>{window.print();}</script>
+    </body></html>`;
+  win.document.write(html);
+  win.document.close();
+}
+
+function escapeHtml(s: string) {
+  return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }

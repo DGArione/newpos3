@@ -1,10 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Plus, Minus, Trash2, Flame, Send, CreditCard, ShoppingBag, User, UserPlus, X } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import {
+  Search, Plus, Minus, Trash2, Flame, Send, CreditCard, ShoppingBag,
+  User, UserPlus, X, Pause, Play, RotateCcw, Timer, ClipboardList,
+} from "lucide-react";
+import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
+import { useAuth } from "@/lib/auth";
 import { MenuItem, CartLine, TableRow, Order, ModifierGroup } from "@/lib/types";
 import { PageLoader, EmptyState, useToast, Modal } from "@/components/ui";
 
@@ -15,6 +19,21 @@ interface Customer {
   address: string;
   loyaltyPoints?: number;
 }
+interface HeldOrder {
+  id: number;
+  label: string;
+  staffName: string;
+  orderType: string;
+  tableId: number | null;
+  tableName: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  items: CartLine[];
+  note: string;
+  priority: string;
+  heldAt: string;
+}
 
 type OrderType = "dine-in" | "takeaway" | "delivery";
 
@@ -23,6 +42,7 @@ function OrderInner() {
   const params = useSearchParams();
   const settings = useSettings();
   const toast = useToast();
+  const { user } = useAuth();
   const currency = settings?.currencySymbol || "Rs. ";
 
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -41,6 +61,14 @@ function OrderInner() {
   const [sending, setSending] = useState(false);
   const [modItem, setModItem] = useState<MenuItem | null>(null);
   const [custLookupOpen, setCustLookupOpen] = useState(false);
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
+
+  const canManageSeq = user?.role === "manager" || user?.role === "superManager";
+
+  const loadHeld = useCallback(() => {
+    apiGet<HeldOrder[]>("/held-orders").then((d) => setHeldOrders(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -57,6 +85,7 @@ function OrderInner() {
       .finally(() => setLoading(false));
     const presetTable = params.get("tableId");
     if (presetTable) setTableId(Number(presetTable));
+    loadHeld();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -73,7 +102,6 @@ function OrderInner() {
   function addLine(item: MenuItem, modifiers: CartLine["modifiers"] = [], qty = 1, notes = "") {
     const modTotal = modifiers.reduce((s, m) => s + m.priceDelta, 0);
     setCart((prev) => {
-      // merge identical plain lines
       if (!modifiers.length && !notes) {
         const idx = prev.findIndex((c) => c.menuItemId === item.id && !c.modifiers.length && !c.notes);
         if (idx >= 0) {
@@ -99,10 +127,10 @@ function OrderInner() {
     setCart((prev) => {
       const copy = [...prev];
       const line = copy[i];
-      const nextQty = line.qty + delta;
-      if (nextQty <= 0) return copy.filter((_, idx) => idx !== i);
-      const modTotal = line.modifiers.reduce((s, m) => s + m.priceDelta, 0);
-      copy[i] = { ...line, qty: nextQty, lineTotal: +((line.basePrice + modTotal) * nextQty).toFixed(2) };
+      if (!line) return prev;
+      const unit = line.lineTotal / line.qty;
+      const nextQty = Math.max(1, line.qty + delta);
+      copy[i] = { ...line, qty: nextQty, lineTotal: +(unit * nextQty).toFixed(2) };
       return copy;
     });
   }
@@ -127,11 +155,55 @@ function OrderInner() {
         router.push(`/payment?orderId=${order.id}`);
       } else {
         toast.push("ok", `${order.displayNum} sent to kitchen · ${money(order.total, currency)}`);
-        setCart([]); setNote(""); setPriority(false); setCust({ name: "", phone: "", address: "" });
+        resetCart();
       }
     } catch (e) {
       toast.push("bad", e instanceof Error ? e.message : "Failed to send order");
     } finally { setSending(false); }
+  }
+
+  async function holdOrder() {
+    if (!cart.length) { toast.push("info", "Nothing to hold"); return; }
+    try {
+      await apiPost("/held-orders", {
+        label: cust.name || tables.find((t) => t.id === tableId)?.name || orderType,
+        orderType, tableId, tableName: tables.find((t) => t.id === tableId)?.name || "",
+        customerName: cust.name, customerPhone: cust.phone, customerAddress: cust.address,
+        items: cart, note, priority: priority ? "high" : "normal",
+      });
+      toast.push("ok", "Order held");
+      resetCart();
+      loadHeld();
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed to hold"); }
+  }
+
+  async function recallHeld(h: HeldOrder) {
+    // Hold current cart first if any items so nothing is lost.
+    if (cart.length) await holdOrder();
+    setCart(h.items);
+    setOrderType((h.orderType as OrderType) || "dine-in");
+    setTableId(h.tableId || null);
+    setCust({ name: h.customerName || "", phone: h.customerPhone || "", address: h.customerAddress || "" });
+    setNote(h.note || "");
+    setPriority(h.priority === "high");
+    try { await apiDelete(`/held-orders/${h.id}`); loadHeld(); }
+    catch { /* ignore */ }
+    setHeldOpen(false);
+    toast.push("ok", `Recalled ${h.label || h.orderType}`);
+  }
+
+  function resetCart() {
+    setCart([]); setNote(""); setPriority(false);
+    setCust({ name: "", phone: "", address: "" });
+    setTableId(null);
+  }
+
+  async function resetOrderNumber() {
+    if (!confirm("Reset today's order number counter back to 1?")) return;
+    try {
+      await apiPost("/order-sequence/reset");
+      toast.push("ok", "Order number counter reset");
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
   }
 
   if (loading) return <PageLoader label="Loading menu" />;
@@ -139,15 +211,17 @@ function OrderInner() {
   const typeTabs: OrderType[] = ["dine-in", "takeaway", "delivery"];
 
   return (
-    <div className="grid lg:grid-cols-[1fr_380px] gap-5 -mt-1">
-      {/* Menu side */}
-      <div className="min-w-0">
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
+    <div className="grid lg:grid-cols-[1fr_380px] gap-3 h-full">
+      {/* ===== Menu side ===== */}
+      <div className="min-w-0 flex flex-col gap-3 min-h-0">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 max-w-md min-w-[200px]">
             <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input className="inp pl-9" placeholder="Search dish or PLU…" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
 
+          {/* Customer chip or button */}
           {cust.name || cust.phone ? (
             <div
               className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[12.5px] font-semibold"
@@ -155,31 +229,39 @@ function OrderInner() {
             >
               <User size={14} />
               <span>{cust.name || cust.phone}</span>
-              <button
-                onClick={() => setCust({ name: "", phone: "", address: "" })}
-                aria-label="Clear customer"
-                className="opacity-70 hover:opacity-100"
-                title="Detach customer"
-              >
+              <button onClick={() => setCust({ name: "", phone: "", address: "" })} aria-label="Clear customer" className="opacity-70 hover:opacity-100">
                 <X size={13} />
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setCustLookupOpen(true)}
-              className="btn btn-ghost btn-sm"
-              title="Attach a customer to this order"
-            >
+            <button onClick={() => setCustLookupOpen(true)} className="btn btn-ghost btn-sm" title="Attach customer">
               <UserPlus size={14} /> Customer
+            </button>
+          )}
+
+          {/* Hold list */}
+          <button onClick={() => setHeldOpen(true)} className="btn btn-ghost btn-sm relative" title="Held orders (recall)">
+            <ClipboardList size={14} /> Held
+            {heldOrders.length > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 pill pill-info" style={{ padding: "0 5px", fontSize: 9 }}>
+                {heldOrders.length}
+              </span>
+            )}
+          </button>
+
+          {canManageSeq && (
+            <button onClick={resetOrderNumber} className="btn btn-ghost btn-sm" title="Reset today's order number counter back to 1">
+              <RotateCcw size={14} /> Reset #
             </button>
           )}
         </div>
 
+        {/* Categories (scrollable row) */}
         {!q && (
-          <div className="flex gap-2 overflow-x-auto pb-3 mb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
             {["All", ...cats].map((c) => (
               <button key={c} onClick={() => setActiveCat(c)}
-                className="px-3.5 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap transition-colors border"
+                className="px-3.5 py-1.5 rounded-full text-[13px] font-semibold whitespace-nowrap transition-colors border shrink-0"
                 style={activeCat === c
                   ? { background: "var(--olive)", color: "#ffffff", borderColor: "var(--olive)" }
                   : { background: "var(--panel)", color: "var(--muted)", borderColor: "var(--line)" }}>
@@ -189,27 +271,39 @@ function OrderInner() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
-          {filtered.map((item) => (
-            <button key={item.id} onClick={() => onItemClick(item)}
-              className="gb-card p-3.5 text-left hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col gap-2 min-h-[92px] justify-between">
-              <div className="font-medium text-[13.5px] leading-snug text-ink line-clamp-2">{item.name}</div>
-              <div className="flex items-center justify-between">
-                <span className="mono font-head font-semibold text-clay text-[15px]">{money(item.price, currency)}</span>
-                {item.modifiers && item.modifiers.length > 0 && (
-                  <span className="pill pill-olive !py-0.5 !px-2 !text-[10px]">options</span>
+        {/* Items grid */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
+            {filtered.map((item) => (
+              <button key={item.id} onClick={() => onItemClick(item)}
+                className="rounded-xl p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 min-h-[96px] justify-between"
+                style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+                {item.imageUrl && (
+                  <div
+                    className="w-full h-20 rounded-lg bg-cover bg-center -mt-1 -mx-1 mb-1"
+                    style={{ backgroundImage: `url(${item.imageUrl})`, width: "calc(100% + 0.5rem)" }}
+                  />
                 )}
-              </div>
-            </button>
-          ))}
-          {!filtered.length && <div className="col-span-full"><EmptyState title="No dishes found" hint="Try another category or search term." /></div>}
+                <div className="font-medium text-[13px] leading-snug text-ink line-clamp-2">{item.name}</div>
+                <div className="flex items-center justify-between">
+                  <span className="mono font-semibold text-[14px]" style={{ color: "var(--olive-700)" }}>{money(item.price, currency)}</span>
+                  {item.modifiers && item.modifiers.length > 0 && (
+                    <span className="pill pill-olive" style={{ padding: "1px 7px", fontSize: 10 }}>options</span>
+                  )}
+                </div>
+              </button>
+            ))}
+            {!filtered.length && <div className="col-span-full"><EmptyState title="No dishes found" hint="Try another category or search term." /></div>}
+          </div>
         </div>
       </div>
 
-      {/* Cart side */}
-      <aside className="lg:sticky lg:top-[72px] lg:h-[calc(100vh-92px)] flex flex-col gb-card overflow-hidden">
-        {/* order type */}
-        <div className="p-3 border-b border-line-soft">
+      {/* ===== Cart side (sticky footer always visible) ===== */}
+      <aside className="flex flex-col overflow-hidden rounded-[var(--r-2xl)] max-h-[calc(100vh-100px)]"
+        style={{ background: "var(--panel)", boxShadow: "var(--shadow-sm)" }}>
+
+        {/* Order type + table + customer form */}
+        <div className="p-3 border-b border-line-soft shrink-0">
           <div className="flex gap-1.5 p-1 rounded-full" style={{ background: "var(--panel-2)" }}>
             {typeTabs.map((t) => (
               <button key={t} onClick={() => setOrderType(t)}
@@ -234,8 +328,8 @@ function OrderInner() {
           )}
         </div>
 
-        {/* cart lines */}
-        <div className="flex-1 overflow-y-auto p-3">
+        {/* Cart lines */}
+        <div className="flex-1 overflow-y-auto p-3 min-h-0">
           {!cart.length ? (
             <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-muted py-10">
               <ShoppingBag size={30} className="opacity-40" />
@@ -244,12 +338,12 @@ function OrderInner() {
           ) : (
             <div className="flex flex-col gap-2">
               {cart.map((line, i) => (
-                <div key={i} className="rounded-md p-2.5" style={{ background: "var(--panel-2)" }}>
+                <div key={i} className="rounded-lg p-2.5" style={{ background: "var(--panel-2)" }}>
                   <div className="flex justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-[13px] font-semibold text-ink leading-tight">{line.name}</div>
                       {line.modifiers.map((m, j) => <div key={j} className="text-[11px] text-muted">+ {m.option}{m.priceDelta ? ` (${money(m.priceDelta, currency)})` : ""}</div>)}
-                      {line.notes && <div className="text-[11px] text-clay italic">“{line.notes}”</div>}
+                      {line.notes && <div className="text-[11px] italic" style={{ color: "var(--olive-700)" }}>“{line.notes}”</div>}
                     </div>
                     <div className="mono text-[13px] font-semibold text-ink whitespace-nowrap">{money(line.lineTotal, currency)}</div>
                   </div>
@@ -267,23 +361,53 @@ function OrderInner() {
           )}
         </div>
 
-        {/* footer */}
-        <div className="border-t border-line-soft p-3 space-y-2.5">
-          <input className="inp !py-2 text-[13px]" placeholder="Ticket note (e.g. no onion)" value={note} onChange={(e) => setNote(e.target.value)} />
-          <div className="flex items-center justify-between">
-            <button onClick={() => setPriority((p) => !p)}
-              className={`btn btn-sm ${priority ? "btn-danger" : "btn-ghost"}`}>
-              <Flame size={14} /> {priority ? "Priority" : "Normal"}
+        {/* STICKY footer — note, priority, totals + action buttons */}
+        <div className="shrink-0 border-t border-line-soft p-3" style={{ background: "var(--panel)" }}>
+          <input
+            className="inp !py-2 text-[12.5px] mb-2"
+            placeholder="Ticket note (e.g. allergy, rush)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <div className="flex items-center justify-between mb-2">
+            <button
+              onClick={() => setPriority(!priority)}
+              className={priority ? "btn btn-danger btn-sm" : "btn btn-ghost btn-sm"}
+            >
+              <Flame size={13} /> {priority ? "Priority" : "Normal"}
             </button>
-            <div className="text-right">
-              <div className="text-[11px] text-muted uppercase tracking-wide">Subtotal</div>
-              <div className="font-head text-xl text-ink mono">{money(subtotal, currency)}</div>
+            <div className="text-[12px] text-muted">
+              Subtotal
+              <span className="mono font-semibold text-ink ml-2">{money(subtotal, currency)}</span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => send(false)} disabled={!cart.length || sending} className="btn btn-olive"><Send size={15} /> Kitchen</button>
-            <button onClick={() => send(true)} disabled={!cart.length || sending} className="btn btn-primary"><CreditCard size={15} /> Send & Pay</button>
+
+          <div className="flex gap-2">
+            <button
+              onClick={holdOrder}
+              disabled={!cart.length || sending}
+              className="btn btn-ghost flex-1"
+              title="Hold for later (F9)"
+            >
+              <Pause size={14} /> Hold
+            </button>
+            <button
+              onClick={() => send(false)}
+              disabled={!cart.length || sending}
+              className="btn btn-kot flex-[2]"
+              title="Send to kitchen (F4)"
+            >
+              <Send size={14} /> {sending ? "Sending…" : "Send to Kitchen"}
+            </button>
           </div>
+          <button
+            onClick={() => send(true)}
+            disabled={!cart.length || sending}
+            className="btn btn-primary w-full mt-2 btn-lg"
+            title="Send & pay (F8)"
+          >
+            <CreditCard size={15} /> Send &amp; Pay · {money(subtotal, currency)}
+          </button>
         </div>
       </aside>
 
@@ -291,9 +415,22 @@ function OrderInner() {
 
       {custLookupOpen && (
         <CustomerLookup
-          currency={currency}
           onClose={() => setCustLookupOpen(false)}
           onPick={(c) => { setCust({ name: c.name, phone: c.phone, address: c.address || "" }); setCustLookupOpen(false); toast.push("ok", `Customer ${c.name || c.phone} attached`); }}
+        />
+      )}
+
+      {heldOpen && (
+        <HeldOrdersModal
+          held={heldOrders}
+          currency={currency}
+          onClose={() => setHeldOpen(false)}
+          onRecall={recallHeld}
+          onDelete={async (h) => {
+            if (!confirm(`Discard held order "${h.label || h.orderType}"?`)) return;
+            try { await apiDelete(`/held-orders/${h.id}`); loadHeld(); }
+            catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
+          }}
         />
       )}
     </div>
@@ -301,32 +438,41 @@ function OrderInner() {
 }
 
 export default function OrderPage() {
-  return <Suspense fallback={<PageLoader label="Loading menu" />}><OrderInner /></Suspense>;
+  return (
+    <Suspense fallback={<PageLoader label="Loading" />}>
+      <OrderInner />
+    </Suspense>
+  );
 }
 
+/* ---------- Modifier modal ---------- */
 function ModifierModal({ item, currency, onClose, onAdd }: {
-  item: MenuItem; currency: string; onClose: () => void;
+  item: MenuItem;
+  currency: string;
+  onClose: () => void;
   onAdd: (mods: CartLine["modifiers"], qty: number, notes: string) => void;
 }) {
+  const groups = (item.modifiers || []) as ModifierGroup[];
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
-  const groups = item.modifiers as ModifierGroup[];
 
-  const mods = Object.entries(picked).map(([groupName, optName]) => {
-    const g = groups.find((x) => x.name === groupName);
-    const o = g?.options.find((x) => x.option === optName);
-    return { group: groupName, option: optName, priceDelta: o?.priceDelta || 0 };
-  });
+  const mods: CartLine["modifiers"] = Object.entries(picked)
+    .filter(([, opt]) => opt)
+    .map(([group, opt]) => {
+      const g = groups.find((x) => x.name === group);
+      const o = g?.options.find((o) => o.option === opt);
+      return { group, option: opt, priceDelta: o?.priceDelta || 0 };
+    });
   const unit = item.price + mods.reduce((s, m) => s + m.priceDelta, 0);
 
   return (
-    <Modal open title={item.name} onClose={onClose} width={420}>
-      <div className="space-y-4">
+    <Modal open title={item.name} onClose={onClose} width={460}>
+      <div className="space-y-3">
         {groups.map((g) => (
-          <div key={g.id}>
+          <div key={g.name}>
             <div className="lbl">{g.name}</div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {g.options.map((o) => {
                 const active = picked[g.name] === o.option;
                 return (
@@ -358,16 +504,8 @@ function ModifierModal({ item, currency, onClose, onAdd }: {
   );
 }
 
-/** Customer lookup / attach modal.
- *  Supports: search by phone or name, pick existing, or create a new one and attach.
- */
-function CustomerLookup({
-  currency, onClose, onPick,
-}: {
-  currency: string;
-  onClose: () => void;
-  onPick: (c: Customer) => void;
-}) {
+/* ---------- Customer lookup ---------- */
+function CustomerLookup({ onClose, onPick }: { onClose: () => void; onPick: (c: Customer) => void }) {
   const toast = useToast();
   const [q, setQ] = useState("");
   const [list, setList] = useState<Customer[]>([]);
@@ -415,21 +553,14 @@ function CustomerLookup({
         <>
           <div className="relative mb-3">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              className="inp pl-9"
-              placeholder="Search by phone or name…"
-              value={q}
-              autoFocus
-              onChange={(e) => setQ(e.target.value)}
-            />
+            <input className="inp pl-9" placeholder="Search by phone or name…" value={q} autoFocus onChange={(e) => setQ(e.target.value)} />
           </div>
-
           <div className="max-h-[320px] overflow-y-auto -mx-1 px-1">
             {loading ? (
               <div className="py-10 text-center text-sm text-muted">Searching…</div>
             ) : !list.length ? (
               <div className="py-10 text-center text-sm text-muted">
-                {q ? "Nothing matched. Try “New customer” to create one." : "No customers yet. Add one with “New customer”."}
+                {q ? "Nothing matched. Try “New customer”." : "No customers yet."}
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">
@@ -437,25 +568,13 @@ function CustomerLookup({
                   <button key={c.id} onClick={() => onPick(c)}
                     className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
                     style={{ background: "var(--panel-2)" }}>
-                    <span
-                      className="flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white"
-                      style={{ background: "var(--olive)" }}
-                    >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white" style={{ background: "var(--olive)" }}>
                       {(c.name || c.phone).charAt(0).toUpperCase()}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-[13.5px] text-ink truncate">
-                        {c.name || <span className="text-muted italic">(no name)</span>}
-                      </div>
-                      <div className="text-[11.5px] text-muted truncate">
-                        {c.phone}{c.address ? ` · ${c.address}` : ""}
-                      </div>
+                      <div className="font-semibold text-[13.5px] text-ink truncate">{c.name || <span className="text-muted italic">(no name)</span>}</div>
+                      <div className="text-[11.5px] text-muted truncate">{c.phone}{c.address ? ` · ${c.address}` : ""}</div>
                     </div>
-                    {c.loyaltyPoints && c.loyaltyPoints > 0 ? (
-                      <span className="pill pill-olive">
-                        {money(c.loyaltyPoints, "")} pts
-                      </span>
-                    ) : null}
                   </button>
                 ))}
               </div>
@@ -464,24 +583,67 @@ function CustomerLookup({
         </>
       ) : (
         <div className="space-y-3">
-          <div>
-            <label className="lbl">Phone <span className="text-bad">*</span></label>
-            <input className="inp" value={newC.phone} autoFocus
-              onChange={(e) => setNewC({ ...newC, phone: e.target.value })} />
-          </div>
-          <div>
-            <label className="lbl">Name</label>
-            <input className="inp" value={newC.name}
-              onChange={(e) => setNewC({ ...newC, name: e.target.value })} />
-          </div>
-          <div>
-            <label className="lbl">Address (optional)</label>
-            <input className="inp" value={newC.address}
-              onChange={(e) => setNewC({ ...newC, address: e.target.value })} />
-          </div>
-          <button onClick={createAndAttach} disabled={busy} className="btn btn-primary w-full">
-            {busy ? "Saving…" : "Create & attach"}
-          </button>
+          <div><label className="lbl">Phone <span className="text-bad">*</span></label>
+            <input className="inp" value={newC.phone} autoFocus onChange={(e) => setNewC({ ...newC, phone: e.target.value })} /></div>
+          <div><label className="lbl">Name</label>
+            <input className="inp" value={newC.name} onChange={(e) => setNewC({ ...newC, name: e.target.value })} /></div>
+          <div><label className="lbl">Address</label>
+            <input className="inp" value={newC.address} onChange={(e) => setNewC({ ...newC, address: e.target.value })} /></div>
+          <button onClick={createAndAttach} disabled={busy} className="btn btn-primary w-full">{busy ? "Saving…" : "Create & attach"}</button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ---------- Held orders list ---------- */
+function HeldOrdersModal({
+  held, currency, onClose, onRecall, onDelete,
+}: {
+  held: HeldOrder[];
+  currency: string;
+  onClose: () => void;
+  onRecall: (h: HeldOrder) => void;
+  onDelete: (h: HeldOrder) => void;
+}) {
+  return (
+    <Modal open title={`Held orders (${held.length})`} onClose={onClose} width={560}>
+      {!held.length ? (
+        <div className="text-sm text-muted py-10 text-center">
+          No held orders. Press <b>Hold</b> to park an order and come back to it.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 max-h-[340px] overflow-y-auto">
+          {held.map((h) => {
+            const total = h.items.reduce((s, l) => s + l.lineTotal, 0);
+            return (
+              <div key={h.id} className="rounded-xl p-3 flex items-start gap-3" style={{ background: "var(--panel-2)" }}>
+                <span
+                  className="flex size-10 shrink-0 items-center justify-center rounded-full text-white font-bold text-[13px]"
+                  style={{ background: "var(--info)" }}
+                >
+                  <Timer size={16} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-ink text-[13.5px] truncate">
+                    {h.label || h.tableName || h.customerName || "Held order"}
+                  </div>
+                  <div className="text-[11.5px] text-muted">
+                    {h.items.length} items · {money(total, currency)} · by {h.staffName}
+                  </div>
+                  <div className="text-[11px] text-muted">
+                    {(h.heldAt || "").replace("T", " ").slice(0, 16)}
+                  </div>
+                </div>
+                <button onClick={() => onDelete(h)} className="btn btn-ghost btn-sm !px-2" title="Discard">
+                  <Trash2 size={13} />
+                </button>
+                <button onClick={() => onRecall(h)} className="btn btn-primary btn-sm">
+                  <Play size={13} /> Recall
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </Modal>
