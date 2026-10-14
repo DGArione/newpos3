@@ -138,13 +138,13 @@ CREATE TABLE IF NOT EXISTS settings (
   businessEmail            TEXT DEFAULT '',
   theme                    TEXT DEFAULT 'light',
   allowUserThemeOverride   INTEGER DEFAULT 1,
-  lightThemeId             TEXT DEFAULT 'goldenBeach',
-  darkThemeId              TEXT DEFAULT 'goldenBeachNight',
-  activeThemeId            TEXT DEFAULT 'goldenBeach',
-  accentColor              TEXT DEFAULT '#b06a38',
-  accentDark               TEXT DEFAULT '#8f5126',
-  accentSoft               TEXT DEFAULT '#f1e2d0',
-  font                     TEXT DEFAULT 'Hanken Grotesk',
+  lightThemeId             TEXT DEFAULT 'goldenPos',
+  darkThemeId              TEXT DEFAULT 'goldenPosDark',
+  activeThemeId            TEXT DEFAULT 'goldenPos',
+  accentColor              TEXT DEFAULT '#f6990d',
+  accentDark               TEXT DEFAULT '#a85e00',
+  accentSoft               TEXT DEFAULT '#fff3dc',
+  font                     TEXT DEFAULT 'Poppins',
   currencySymbol           TEXT DEFAULT 'Rs. ',
   serviceChargeRate        REAL DEFAULT 0.1000,
   vatRate                  REAL DEFAULT 0.0800,
@@ -407,6 +407,23 @@ CREATE TABLE IF NOT EXISTS order_sequences (
 
 function migrate() {
   db.exec(SCHEMA);
+  // ── Golden POS re-theme migration ─────
+  // Switch databases still on the old vintage "Golden Beach" palette over to
+  // the new Golden POS orange/grey design. Users who have picked a different
+  // theme (ocean, slate, violet, …) are left alone.
+  try {
+    db.exec(`
+      UPDATE settings SET lightThemeId  = 'goldenPos'      WHERE lightThemeId  = 'goldenBeach';
+      UPDATE settings SET darkThemeId   = 'goldenPosDark'  WHERE darkThemeId   = 'goldenBeachNight';
+      UPDATE settings SET activeThemeId = 'goldenPos'      WHERE activeThemeId = 'goldenBeach';
+      UPDATE settings SET
+        accentColor = '#f6990d',
+        accentDark  = '#a85e00',
+        accentSoft  = '#fff3dc'
+        WHERE accentColor = '#b06a38';
+      UPDATE settings SET font = 'Poppins' WHERE font = 'Hanken Grotesk';
+    `);
+  } catch (e) { /* fresh install — settings row not inserted yet */ }
   // Additive migrations for existing databases (safe no-ops on fresh installs).
   const addCol = (table, col, def) => {
     try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch (e) { /* already exists */ }
@@ -558,7 +575,7 @@ function seedIfEmpty() {
     INSERT INTO settings (id, businessName, businessTagline, businessAddress, businessPhone, serviceChargeRate, vatRate,
       font, lightThemeId, darkThemeId, activeThemeId, accentColor, accentDark, accentSoft)
     VALUES (1, 'Golden Beach Restaurant', 'Midigama', 'Midigama, Sri Lanka', '', 0, 0,
-      'Hanken Grotesk', 'goldenBeach', 'goldenBeachNight', 'goldenBeach', '#b06a38', '#8f5126', '#f1e2d0');
+      'Poppins', 'goldenPos', 'goldenPosDark', 'goldenPos', '#f6990d', '#a85e00', '#fff3dc');
 
     INSERT INTO branches (id, name, address, phone, status) VALUES
     (1, 'Golden Beach Restaurant', 'Midigama, Sri Lanka', '', 'active');

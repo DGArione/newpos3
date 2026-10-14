@@ -67,9 +67,9 @@ Object.assign(window.POS_THEMES, {
     const mode = userMode || settings.theme || "light";
 
     const themeId = mode === "dark"
-      ? (settings.darkThemeId  || "slateNight")
-      : (settings.lightThemeId || "espresso");
-    const palette = window.POS_THEMES[themeId] || window.POS_THEMES.espresso;
+      ? (settings.darkThemeId  || "goldenPosDark")
+      : (settings.lightThemeId || "goldenPos");
+    const palette = window.POS_THEMES[themeId] || window.POS_THEMES.goldenPos;
 
     // Set data-theme so remaining CSS (text, success/danger bg etc.) matches
     document.documentElement.setAttribute("data-theme", (palette.dark || mode === "dark") ? "dark" : "light");
@@ -77,7 +77,7 @@ Object.assign(window.POS_THEMES, {
     applyPalette(palette);
     window._currentMode = mode;
 
-    if (settings.font) document.documentElement.style.setProperty("--font-family-override", `"${settings.font}", "Hanken Grotesk", sans-serif`);
+    if (settings.font) document.documentElement.style.setProperty("--font-family-override", `"${settings.font}", "Poppins", -apple-system, "Segoe UI", sans-serif`);
 
     const name = settings.businessName || "Restaurant POS";
     document.querySelectorAll("[data-brand-name]").forEach(el => (el.textContent = name));

@@ -1,66 +1,66 @@
 /* style.css — shared design system for the whole POS.
    Change the tokens below to restyle every screen at once. */
 
-@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Oswald:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700;800&family=Yellowtail&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Golden Beach — vintage coastal: olive green + kraft paper, terracotta accents.
-     Most of these are also set at runtime by the "goldenBeach" theme in theme.js. */
-  --bg: #ece3d0;
-  --panel: #f7f1e2;
-  --text: #27271d;
-  --muted: #7a7660;
-  --border: #d9cdb0;
-  --border-soft: #e7dcc3;
+  /* Golden POS — orange brand, white panels, grey background.
+     Most of these are also set at runtime by the "goldenPos" theme in theme.js. */
+  --bg: #f2f2f2;
+  --panel: #ffffff;
+  --text: #1e1e1e;
+  --muted: #737373;
+  --border: #eaeaea;
+  --border-soft: #f0f0f0;
 
-  --accent: #b06a38;
-  --accent-dark: #8f5126;
-  --accent-soft: #f1e2d0;
+  --accent: #f6990d;
+  --accent-dark: #a85e00;
+  --accent-soft: #fff3dc;
 
-  --success: #4f7d4e;
-  --success-bg: #e4efdd;
-  --warning: #b7841f;
-  --warning-bg: #f6ecce;
-  --danger: #b2432f;
-  --danger-bg: #f6e1d8;
-  --neutral-bg: #e7ddc6;
-  --espresso: #4c5738;
-  --espresso-bg: #e3e5d1;
+  --success: #35c344;
+  --success-bg: #e3f9e5;
+  --warning: #e0a040;
+  --warning-bg: #fef7e3;
+  --danger: #f52121;
+  --danger-bg: #fde8e8;
+  --neutral-bg: #f7f7f7;
+  --espresso: #7471f6;      /* re-purposed as "kot purple" to keep legacy classes */
+  --espresso-bg: #eeeefd;
 
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 26px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 
-  /* Softer, more layered shadows read as more modern than a single hard drop. */
-  --shadow-sm: 0 1px 2px rgba(30, 24, 17, 0.05), 0 1px 3px rgba(30, 24, 17, 0.04);
-  --shadow-md: 0 6px 16px rgba(30, 24, 17, 0.08), 0 2px 6px rgba(30, 24, 17, 0.05);
-  --shadow-lg: 0 18px 50px rgba(30, 24, 17, 0.14), 0 6px 16px rgba(30, 24, 17, 0.06);
+  /* Clean modern shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.22), 0 4px 12px rgba(0, 0, 0, 0.06);
   --ring: 0 0 0 3px var(--accent-soft);
 
   accent-color: var(--accent); /* recolors native checkboxes/radios away from browser-default blue */
-  font-family: var(--font-family-override, "Hanken Grotesk"), -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-family-override, "Poppins"), -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
 
 /* ---------- Dark theme (toggled via [data-theme="dark"] on <html>, set by theme.js) ---------- */
 [data-theme="dark"] {
-  --bg: #1b1e15;
-  --panel: #24281c;
-  --text: #ece6d4;
-  --muted: #a0a083;
-  --border: #363b2a;
-  --border-soft: #2c3121;
+  --bg: #181818;
+  --panel: #232323;
+  --text: #f2f2f2;
+  --muted: #a3a3a3;
+  --border: #333333;
+  --border-soft: #2e2e2e;
 
   --success-bg: #0d2318;
-  --warning-bg: #1f1500;
-  --danger-bg: #200a0a;
-  --neutral-bg: #1e2028;
-  --espresso-bg: #1e2028;
+  --warning-bg: #2b2410;
+  --danger-bg: #2e1812;
+  --neutral-bg: #2a2a2a;
+  --espresso-bg: #2a2a2a;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 20px 56px rgba(0, 0, 0, 0.6), 0 8px 18px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 20px -4px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 50px -12px rgba(0, 0, 0, 0.7);
   color-scheme: dark;
 }
 
@@ -78,7 +78,7 @@ body {
   line-height: 1.5;
 }
 
-h1, h2, h3 { font-family: "Caveat", "Segoe Script", cursive; font-weight: 700; letter-spacing: 0; }
+h1, h2, h3 { font-family: var(--font-family-override, "Poppins"), -apple-system, "Segoe UI", sans-serif; font-weight: 600; letter-spacing: -0.015em; }
 
 .mono { font-family: "JetBrains Mono", "SF Mono", "Courier New", monospace; font-feature-settings: "tnum" 1; }
 
@@ -821,112 +821,170 @@ tbody tr:hover td { background: color-mix(in srgb, var(--neutral-bg) 55%, transp
 /* Keyboard key hint */
 kbd { font-family:"JetBrains Mono",monospace; font-size:11px; background:var(--neutral-bg); border:1px solid var(--border); border-radius:5px; padding:1px 5px; margin:0 1px; }
 
+
 /* =====================================================================
-   HANDCRAFTED CAFÉ LAYER — Golden Beach
-   Makes the POS feel like the restaurant's own menu board: kraft-paper
-   grain, a chalkboard sidebar, hand-marker headings, dashed menu leaders
-   and tactile, pressable buttons. Loaded last so it restyles every screen.
+   GOLDEN POS LAYER
+   Clean orange brand, white panels, neutral greys, rounded cards.
+   Replaces the earlier "handcrafted café" layer that gave the kraft-paper
+   / chalkboard / Caveat-script look. Loaded last so it restyles every
+   screen regardless of what the base rules say.
    ===================================================================== */
 
 :root {
   /* Aliases for legacy variable names some pages/modals still reference,
      so they resolve to the current theme instead of being undefined. */
   --card: var(--panel);
-  --input-bg: color-mix(in srgb, var(--neutral-bg) 55%, var(--panel));
-
-  --chalk-bg:   #2c3420;
-  --chalk-bg2:  #333c26;
-  --chalk-text: #ece4cd;
-  --chalk-muted:#a9ad8c;
-  --chalk-line: rgba(236,228,205,.14);
-  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");
+  --input-bg: var(--panel);
 }
 
-/* ---- Kraft-paper grain across the whole app ---- */
+/* ---- Clean body (no kraft grain, no multiply blend) ---- */
 body {
   background-color: var(--bg);
-  background-image: var(--paper-grain);
-  background-size: 180px 180px;
-  background-attachment: fixed;
-  background-blend-mode: multiply;
+  background-image: none;
 }
 
-/* ---- Hand-marker headings ---- */
-h1, h2, h3 { font-family:"Caveat","Segoe Script",cursive; font-weight:700; }
-.page-header h2 { font-size: 34px; line-height: 1.02; letter-spacing: 0; position: relative; display: inline-block; }
-.page-header h2::after {
-  content:""; position:absolute; left:2px; right:2px; bottom:-7px; height:8px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='8' viewBox='0 0 120 8'%3E%3Cpath d='M2 5 Q 18 1 36 5 T 72 5 T 118 4' stroke='%23b06a38' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x;
-  background-size: 120px 8px; opacity: .85;
+/* ---- Clean sans headings ---- */
+h1, h2, h3 {
+  font-family: var(--font-family-override, "Poppins"), -apple-system, "Segoe UI", sans-serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.015em !important;
 }
-.page-header .subtitle { font-style: italic; }
+.page-header h2 {
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  display: inline-block;
+}
+.page-header h2::after { display: none; }      /* no hand-drawn underline */
+.page-header .subtitle { font-style: normal; }
 
-/* Menu-board section labels (the printed "SANDWICHES …… PRICE" rhythm) */
+/* ---- Table headers: clean, not Oswald uppercase ---- */
 .nav-section-label, th, .table th, thead td {
-  font-family:"Oswald",sans-serif !important; letter-spacing:.09em !important;
+  font-family: var(--font-family-override, "Poppins"), -apple-system, sans-serif !important;
+  letter-spacing: .08em !important;
   text-transform: uppercase;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  color: var(--muted) !important;
 }
 
-/* ---- Chalkboard sidebar ---- */
+/* ---- Floating-panel sidebar (golden POS style) ---- */
 .sidebar {
-  background-color: var(--chalk-bg);
-  background-image:
-    radial-gradient(rgba(236,228,205,.05) 1px, transparent 1px),
-    radial-gradient(rgba(236,228,205,.04) 1px, transparent 1px);
-  background-size: 22px 22px, 36px 36px;
-  background-position: 0 0, 11px 18px;
-  border-right: 3px solid #241a0f;           /* a thin wooden frame edge */
-  box-shadow: inset -6px 0 14px -10px rgba(0,0,0,.6);
+  background: var(--panel);
+  background-image: none;
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
-.sidebar .brand { font-family:"Caveat",cursive; font-weight:700; font-size:20px; color: var(--chalk-text); }
-.sidebar-top, .sidebar-branch-row, .sidebar-footer { border-color: var(--chalk-line) !important; }
-.nav-link { color: var(--chalk-muted); font-weight: 500; }
-.nav-link svg { opacity: .9; }
-.nav-link:hover { background: rgba(236,228,205,.08); color: var(--chalk-text); }
-.nav-link.active { background: rgba(236,228,205,.13); color: var(--chalk-text); }
-.nav-link.active::before { background: var(--accent); width: 4px; }
-.nav-section-label { color: var(--chalk-muted) !important; }
-.sidebar-collapse-btn, .sidebar-icon-btn, .sidebar-whoami, .sidebar-branch-pill { color: var(--chalk-muted); }
-.sidebar-collapse-btn:hover, .sidebar-icon-btn:hover { background: rgba(236,228,205,.08); color: var(--chalk-text); }
+.sidebar .brand {
+  font-family: var(--font-family-override, "Poppins"), sans-serif;
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.sidebar-top, .sidebar-branch-row, .sidebar-footer {
+  border-color: var(--border-soft) !important;
+}
+.nav-link {
+  color: var(--muted);
+  font-weight: 500;
+  border-radius: 10px;
+}
+.nav-link svg { opacity: .85; }
+.nav-link:hover { background: var(--neutral-bg); color: var(--text); }
+.nav-link.active {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.nav-link.active svg { opacity: 1; color: #ffffff; }
+.nav-link.active::before { display: none; }    /* kill the little bar */
+.nav-section-label { color: var(--muted) !important; }
+.sidebar-collapse-btn,
+.sidebar-icon-btn,
+.sidebar-whoami,
+.sidebar-branch-pill { color: var(--muted); }
+.sidebar-collapse-btn:hover,
+.sidebar-icon-btn:hover { background: var(--neutral-bg); color: var(--text); }
 .sidebar-branch-select {
-  background: rgba(236,228,205,.08); color: var(--chalk-text);
-  border: 1px solid var(--chalk-line);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
-.sidebar-branch-select option { color: #27271d; }
+.sidebar-branch-select option { color: var(--text); }
 
-/* ---- Tactile paper cards ---- */
+/* ---- Clean rounded cards (no paper offset) ---- */
 .card {
-  border: 1.5px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 0 2px 0 rgba(120,100,60,.10), 0 10px 20px -14px rgba(60,50,25,.45);
+  box-shadow: var(--shadow-sm);
+  background: var(--panel);
 }
-.card.clickable:hover { transform: translateY(-2px) rotate(-.35deg); box-shadow: 0 4px 0 rgba(120,100,60,.12), 0 16px 26px -14px rgba(60,50,25,.5); }
+.card.clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
 
-/* ---- Chunky, pressable buttons ---- */
-.btn { border-radius: 11px; font-weight: 700; border-width: 1.5px; }
+/* ---- Modern buttons (no paper lift) ---- */
+.btn {
+  border-radius: 10px;
+  font-weight: 600;
+  border-width: 1px;
+  transition: background .12s ease, box-shadow .12s ease, transform .06s ease;
+}
 .btn:hover { transform: none; }
 .btn-primary {
-  box-shadow: 0 3px 0 var(--accent-dark), inset 0 1px 0 rgba(255,255,255,.18);
+  box-shadow: 0 3px 10px -3px color-mix(in srgb, var(--accent) 55%, transparent);
 }
-.btn-primary:hover { background: var(--accent); box-shadow: 0 2px 0 var(--accent-dark); transform: translateY(1px); }
-.btn-primary:active { transform: translateY(3px); box-shadow: 0 0 0 var(--accent-dark); }
+.btn-primary:hover {
+  background: var(--accent-dark);
+  box-shadow: 0 4px 14px -3px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.btn-primary:active { transform: translateY(1px); box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 45%, transparent); }
 
-/* ---- Inputs: soft paper wells ---- */
-input, select, textarea { border-width: 1.5px; border-radius: 10px; }
+/* ---- Clean inputs ---- */
+input, select, textarea {
+  border-width: 1px;
+  border-radius: 10px;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+  outline: none;
+}
 
-/* ---- Dashed "menu leader" lines on tables & lists ---- */
-th { border-bottom: 2px dashed var(--border) !important; color: var(--accent-dark) !important; }
-td { border-top: 1px dashed var(--border-soft) !important; }
-hr { border: none; border-top: 1.5px dashed var(--border); }
-.leader { display:flex; align-items:baseline; gap:8px; }
+/* ---- Clean table rows (no dashed leader lines) ---- */
+th {
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--muted) !important;
+  padding: 10px 8px;
+}
+td {
+  border-top: 1px solid var(--border-soft) !important;
+  padding: 10px 8px;
+}
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+}
 .leader > :first-child::after {
-  content:""; flex:1 1 auto; margin:0 4px; align-self: end; height: 0;
-  border-bottom: 2px dotted color-mix(in srgb, var(--muted) 55%, transparent); transform: translateY(-3px);
+  display: none;                               /* no dotted menu-leader line */
 }
 
-/* ---- Status chips as little hand-stuck stickers ---- */
-.badge { border-radius: 7px; transform: rotate(-.6deg); }
-.badge:nth-child(even) { transform: rotate(.6deg); }
+/* ---- Clean badges (no sticker rotation) ---- */
+.badge {
+  border-radius: 999px;
+  transform: none !important;
+  font-weight: 600;
+}
+.badge:nth-child(even) { transform: none !important; }
 
-/* ---- Warm paper scrollbars ---- */
-*::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 34%, transparent); }
+/* ---- Neutral scrollbars (no warm paper tint) ---- */
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
