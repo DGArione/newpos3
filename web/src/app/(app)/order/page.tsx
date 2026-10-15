@@ -261,7 +261,7 @@ function OrderInner() {
   const typeTabs: OrderType[] = ["dine-in", "takeaway", "delivery"];
 
   return (
-    <div className="flex gap-0 h-full">
+    <div className="flex gap-0 overflow-hidden" style={{ height: "calc(100dvh - 84px)" }}>
       {/* ===== Menu side (its own panel for clear separation) ===== */}
       <div
         className="min-w-0 flex-1 flex flex-col gap-3 min-h-0 rounded-[var(--r-2xl)] p-3 md:p-4"
@@ -379,7 +379,7 @@ function OrderInner() {
       </div>
 
       {/* ===== Cart side (sticky footer always visible) ===== */}
-      <aside className="flex flex-col overflow-hidden rounded-[var(--r-2xl)] max-h-[calc(100vh-100px)] shrink-0 w-full lg:w-[var(--cart-w)]"
+      <aside className="flex flex-col overflow-hidden rounded-[var(--r-2xl)] h-full shrink-0 w-full lg:w-[var(--cart-w)]"
         style={{ background: "var(--panel)", boxShadow: "var(--shadow-sm)", ["--cart-w" as string]: `${cartWidth}px` }}>
 
         {/* Order type + table + customer form */}

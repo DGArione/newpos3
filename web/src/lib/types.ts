@@ -51,6 +51,16 @@ export interface OrderItem {
   status: string; // pending | ready | served
 }
 
+export interface OrderPayment {
+  method: string;            // cash | card | online
+  type?: string;             // payment | refund
+  amount: number;            // negative for refunds
+  reason?: string;
+  byStaffName?: string;
+  approvedBy?: string;
+  paidAt?: string;
+}
+
 export interface Order {
   id: number;
   displayNum: string;
@@ -70,8 +80,10 @@ export interface Order {
   total: number;
   grandTotal?: number;
   amountPaid?: number;
+  payments?: OrderPayment[];
+  paidAt?: string;
   status: string;        // pending | preparing | ready | served | completed | voided
-  paymentStatus: string; // unpaid | partial | paid
+  paymentStatus: string; // unpaid | partial | paid | refunded
   priority: string;      // normal | high
   kitchenTag?: string;
   createdAt?: string;

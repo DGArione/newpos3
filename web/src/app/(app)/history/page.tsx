@@ -1,24 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { History as HistoryIcon, Search, Receipt, RefreshCw, X, Printer } from "lucide-react";
+import { History as HistoryIcon, Search, Receipt, RefreshCw, X, Printer, Undo2 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
+import { useAuth } from "@/lib/auth";
 import type { Order } from "@/lib/types";
 import { printReceipt } from "@/lib/receipt";
 
-type Filter = "all" | "paid" | "unpaid" | "voided";
+type Filter = "all" | "paid" | "unpaid" | "refunded" | "voided";
+
+const MGR_ROLES = ["admin", "superManager", "manager"];
 
 export default function HistoryPage() {
   const toast = useToast();
   const settings = useSettings();
+  const { user } = useAuth();
+  const isManager = !!user && MGR_ROLES.includes(user.role);
   const currency = settings?.currencySymbol || "Rs. ";
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [detail, setDetail] = useState<Order | null>(null);
+  const [refundTarget, setRefundTarget] = useState<Order | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -29,10 +35,14 @@ export default function HistoryPage() {
   }, []);
   useEffect(load, [load]);
 
+  const refundTotal = (o: Order) =>
+    (o.payments || []).filter((p) => p.type === "refund").reduce((s, p) => s + Math.abs(p.amount || 0), 0);
+
   const shown = useMemo(() => {
     let list = [...orders];
     if (filter === "paid") list = list.filter((o) => o.paymentStatus === "paid");
-    else if (filter === "unpaid") list = list.filter((o) => o.paymentStatus !== "paid" && o.status !== "voided");
+    else if (filter === "unpaid") list = list.filter((o) => o.paymentStatus !== "paid" && o.paymentStatus !== "refunded" && o.status !== "voided");
+    else if (filter === "refunded") list = list.filter((o) => (o.payments || []).some((p) => p.type === "refund"));
     else if (filter === "voided") list = list.filter((o) => o.status === "voided");
     if (q.trim()) {
       const s = q.toLowerCase();
@@ -46,13 +56,13 @@ export default function HistoryPage() {
     return list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
   }, [orders, filter, q]);
 
-  async function refund(o: Order) {
-    if (!confirm(`Refund ${o.displayNum} (${money(o.grandTotal, currency)})?`)) return;
-    try {
-      await apiPost(`/orders/${o.id}/refund`, { reason: "Manager refund" });
-      toast.push("ok", `${o.displayNum} refunded`);
-      load();
-    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
+  async function doRefund(o: Order, body: { amount: number; method: string; reason: string; pin?: string }) {
+    const res = await apiPost<Order>(`/orders/${o.id}/refund`, body);
+    toast.push("ok", `${o.displayNum} — ${money(body.amount, currency)} refunded`);
+    // merge the updated order back into the list
+    setOrders((prev) => prev.map((x) => (x.id === o.id ? res : x)));
+    if (detail && detail.id === o.id) setDetail(res);
+    setRefundTarget(null);
   }
 
   return (
@@ -68,7 +78,7 @@ export default function HistoryPage() {
             <input className="inp pl-9" placeholder="Search by #, table, name or phone…" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           <div className="flex gap-1.5 p-1 rounded-full" style={{ background: "var(--panel-2)" }}>
-            {(["all", "paid", "unpaid", "voided"] as Filter[]).map((f) => (
+            {(["all", "paid", "unpaid", "refunded", "voided"] as Filter[]).map((f) => (
               <button key={f} onClick={() => setFilter(f)}
                 className="px-3 py-1.5 rounded-full text-[12.5px] font-semibold capitalize transition-colors"
                 style={filter === f
@@ -112,11 +122,19 @@ export default function HistoryPage() {
                     </td>
                     <td className="text-muted text-[12px]">{o.items.length} items</td>
                     <td>
-                      <span className={`pill ${o.status === "voided" ? "pill-bad" : o.paymentStatus === "paid" ? "pill-ok" : "pill-warn"}`}>
+                      <span className={`pill ${o.status === "voided" ? "pill-bad" : o.paymentStatus === "refunded" ? "pill-bad" : o.paymentStatus === "paid" ? "pill-ok" : "pill-warn"}`}>
                         {o.status === "voided" ? "cancelled" : o.paymentStatus}
                       </span>
+                      {o.paymentStatus !== "refunded" && refundTotal(o) > 0 && (
+                        <span className="pill pill-warn ml-1" title="Partially refunded">part. refund</span>
+                      )}
                     </td>
-                    <td className="text-right pr-4 mono font-semibold">{money(o.grandTotal || o.total, currency)}</td>
+                    <td className="text-right pr-4 mono font-semibold">
+                      {money(o.grandTotal || o.total, currency)}
+                      {refundTotal(o) > 0 && (
+                        <div className="text-[11px] font-normal" style={{ color: "var(--bad)" }}>−{money(refundTotal(o), currency)}</div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -126,13 +144,118 @@ export default function HistoryPage() {
       </Screen>
 
       {detail && (
-        <OrderDetail order={detail} currency={currency} settings={settings} onClose={() => setDetail(null)} onRefund={() => refund(detail)} />
+        <OrderDetail
+          order={detail}
+          currency={currency}
+          settings={settings}
+          refundTotal={refundTotal(detail)}
+          onClose={() => setDetail(null)}
+          onRefund={() => setRefundTarget(detail)}
+        />
+      )}
+
+      {refundTarget && (
+        <RefundModal
+          order={refundTarget}
+          currency={currency}
+          isManager={isManager}
+          alreadyRefunded={refundTotal(refundTarget)}
+          onClose={() => setRefundTarget(null)}
+          onSubmit={(body) => doRefund(refundTarget, body)}
+        />
       )}
     </div>
   );
 }
 
-function OrderDetail({ order, currency, settings, onClose, onRefund }: { order: Order; currency: string; settings: ReturnType<typeof useSettings>; onClose: () => void; onRefund: () => void }) {
+function RefundModal({
+  order, currency, isManager, alreadyRefunded, onClose, onSubmit,
+}: {
+  order: Order;
+  currency: string;
+  isManager: boolean;
+  alreadyRefunded: number;
+  onClose: () => void;
+  onSubmit: (body: { amount: number; method: string; reason: string; pin?: string }) => Promise<void>;
+}) {
+  const paid = order.amountPaid || 0;
+  const [amount, setAmount] = useState<string>(paid > 0 ? paid.toFixed(2) : "");
+  const [pmethod, setPmethod] = useState<string>("cash");
+  const [reason, setReason] = useState<string>("");
+  const [pin, setPin] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>("");
+
+  const amt = Number(amount) || 0;
+
+  async function submit() {
+    setErr("");
+    if (amt <= 0) { setErr("Enter a refund amount greater than zero."); return; }
+    if (amt > paid + 0.01) { setErr(`Refund cannot exceed the amount paid (${money(paid, currency)}).`); return; }
+    if (!reason.trim()) { setErr("A reason is required."); return; }
+    if (!isManager && !pin.trim()) { setErr("A manager approval PIN is required."); return; }
+    setBusy(true);
+    try {
+      await onSubmit({ amount: amt, method: pmethod, reason: reason.trim(), pin: pin.trim() || undefined });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Refund failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open title={`Refund — ${order.displayNum}`} onClose={onClose} width={440}>
+      <div className="rounded-xl p-3 mb-4 text-[12.5px]" style={{ background: "var(--panel-2)" }}>
+        <div className="flex justify-between"><span className="text-muted">Order total</span><span className="mono font-semibold">{money(order.grandTotal || order.total, currency)}</span></div>
+        <div className="flex justify-between mt-1"><span className="text-muted">Amount paid</span><span className="mono font-semibold">{money(paid, currency)}</span></div>
+        {alreadyRefunded > 0 && (
+          <div className="flex justify-between mt-1"><span className="text-muted">Already refunded</span><span className="mono font-semibold" style={{ color: "var(--bad)" }}>−{money(alreadyRefunded, currency)}</span></div>
+        )}
+      </div>
+
+      <label className="eyebrow">Refund amount ({currency.trim()})</label>
+      <div className="flex gap-2 mb-1">
+        <input className="inp mono" type="number" min="0" step="0.01" value={amount}
+          onChange={(e) => setAmount(e.target.value)} autoFocus />
+        <button className="btn btn-ghost btn-sm whitespace-nowrap" onClick={() => setAmount(paid.toFixed(2))} type="button">Full</button>
+      </div>
+
+      <label className="eyebrow mt-3">Refund to</label>
+      <div className="flex gap-1.5 p-1 rounded-full mb-3" style={{ background: "var(--panel-2)" }}>
+        {["cash", "card", "online"].map((m) => (
+          <button key={m} type="button" onClick={() => setPmethod(m)}
+            className="flex-1 py-1.5 rounded-full text-[12.5px] font-semibold capitalize transition-colors"
+            style={pmethod === m ? { background: "var(--panel)", color: "var(--olive-700)", boxShadow: "var(--shadow-sm)" } : { color: "var(--muted)" }}>
+            {m}
+          </button>
+        ))}
+      </div>
+
+      <label className="eyebrow">Reason</label>
+      <input className="inp mb-3" placeholder="e.g. wrong item, customer complaint…" value={reason} onChange={(e) => setReason(e.target.value)} />
+
+      {!isManager && (
+        <>
+          <label className="eyebrow">Manager approval PIN</label>
+          <input className="inp mono mb-3" type="password" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} />
+        </>
+      )}
+
+      {err && <div className="rounded-lg p-2.5 mb-3 text-[12.5px]" style={{ background: "var(--bad-wash)", color: "var(--bad)" }}>{err}</div>}
+
+      <div className="flex gap-2">
+        <button className="btn btn-ghost flex-1" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="btn btn-danger flex-1" onClick={submit} disabled={busy}>
+          <Undo2 size={15} /> {busy ? "Refunding…" : `Refund ${money(amt, currency)}`}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function OrderDetail({ order, currency, settings, refundTotal, onClose, onRefund }: { order: Order; currency: string; settings: ReturnType<typeof useSettings>; refundTotal: number; onClose: () => void; onRefund: () => void }) {
+  const refundLines = (order.payments || []).filter((p) => p.type === "refund");
+  const canRefund = order.status !== "voided" && (order.amountPaid || 0) > 0;
   return (
     <Modal open title={`Order ${order.displayNum}`} onClose={onClose} width={520}>
       <div className="flex items-center gap-2 flex-wrap mb-4">
@@ -173,15 +296,36 @@ function OrderDetail({ order, currency, settings, onClose, onRefund }: { order: 
         {order.vat > 0 && <TotalLine label="VAT" value={money(order.vat, currency)} />}
         <div className="divider my-2" />
         <TotalLine label="Total" value={money(order.grandTotal || order.total, currency)} big />
+        {refundTotal > 0 && <TotalLine label="Refunded" value={`−${money(refundTotal, currency)}`} warn />}
       </div>
+
+      {refundLines.length > 0 && (
+        <div className="mt-4 rounded-xl p-3" style={{ background: "var(--bad-wash)" }}>
+          <div className="eyebrow mb-2" style={{ color: "var(--bad)" }}>Refund history</div>
+          <div className="flex flex-col gap-2">
+            {refundLines.map((p, i) => (
+              <div key={i} className="flex items-start justify-between gap-3 text-[12px]">
+                <div className="min-w-0">
+                  <div className="text-ink font-medium capitalize">{p.method} refund{p.reason ? ` — ${p.reason}` : ""}</div>
+                  <div className="text-muted text-[11px]">
+                    {(p.paidAt || "").replace("T", " ").slice(0, 16)}
+                    {p.approvedBy ? ` · ${p.approvedBy}` : p.byStaffName ? ` · ${p.byStaffName}` : ""}
+                  </div>
+                </div>
+                <span className="mono font-semibold whitespace-nowrap" style={{ color: "var(--bad)" }}>−{money(Math.abs(p.amount), currency)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 mt-4">
         <button onClick={() => printReceipt(order, settings, { reprint: true })} className="btn btn-ghost flex-1">
           <Printer size={14} /> Reprint receipt
         </button>
-        {order.status !== "voided" && order.paymentStatus === "paid" && (
+        {canRefund && (
           <button onClick={onRefund} className="btn btn-danger flex-1">
-            <X size={15} /> Refund
+            <Undo2 size={15} /> Refund
           </button>
         )}
       </div>

@@ -47,6 +47,11 @@ export function printReceipt(o: Order, settings: Partial<PublicSettings> & { rec
   const tendered = opts.tendered;
   const balance = tendered != null ? Math.max(0, tendered - (o.grandTotal || o.total)) : null;
 
+  // Scannable bill identifier (CODE128). Uses the order id so a scan maps back
+  // to exactly one bill; falls back to the display number.
+  const billCode = String((o as { id?: number | string }).id ?? o.displayNum ?? "").replace(/[^A-Za-z0-9]/g, "") || "0";
+  const barcodeUrl = `https://barcodeapi.org/api/128/${encodeURIComponent(billCode)}`;
+
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Bill ${esc(o.displayNum)}</title>
   <style>
     @page { size: ${widthMm}mm auto; margin: 3mm; }
@@ -74,6 +79,9 @@ export function printReceipt(o: Order, settings: Partial<PublicSettings> & { rec
     .pay td:last-child { text-align:right; }
     .foot { text-align:center; font-size:10.5px; color:#333; margin-top:8px; line-height:1.4; }
     .badge { text-align:center; font-weight:800; letter-spacing:3px; font-size:11px; border:1px dashed #000; padding:2px; margin-bottom:5px; }
+    .bc { text-align:center; margin-top:6px; }
+    .bc img { max-width:80%; height:42px; object-fit:contain; }
+    .bcnum { font-size:10px; letter-spacing:2px; margin-top:2px; }
   </style></head><body>
     ${opts.reprint ? `<div class="badge">R E P R I N T</div>` : ``}
     ${settings?.logoUrl ? `<div class="c"><img src="${esc(settings.logoUrl)}" style="max-height:48px;max-width:70%;object-fit:contain"></div>` : ``}
@@ -112,6 +120,11 @@ export function printReceipt(o: Order, settings: Partial<PublicSettings> & { rec
       ${balance != null ? `<tr><td>Change</td><td>${money(balance)}</td></tr>` : ""}
       ${(o.amountPaid && tendered == null) ? `<tr><td>Paid</td><td>${money(o.amountPaid)}</td></tr>` : ""}
     </table>` : ""}
+    <hr class="rule">
+    <div class="bc">
+      <img src="${barcodeUrl}" alt="Bill ${esc(billCode)}" onerror="this.style.display='none'">
+      <div class="bcnum">${esc(o.displayNum || billCode)}</div>
+    </div>
     <div class="foot">
       ${esc((settings as { receiptFooterText?: string })?.receiptFooterText || "Thank you — please come again!")}
       <br>Powered by Golden POS
