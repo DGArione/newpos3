@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Tag, Plus, Trash2, Percent, DollarSign } from "lucide-react";
+import { Tag, Plus, Trash2, Percent, DollarSign, Pencil } from "lucide-react";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
 import type { MenuItem } from "@/lib/types";
@@ -91,6 +91,7 @@ export default function PromotionsPage() {
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => toggle(p)}
+                      title={p.active ? "Active — click to disable" : "Disabled — click to enable"}
                       className="w-10 h-6 rounded-full relative transition-colors"
                       style={{ background: p.active ? "var(--olive)" : "var(--line)" }}
                     >
@@ -98,6 +99,9 @@ export default function PromotionsPage() {
                         className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all"
                         style={{ left: p.active ? 18 : 2 }}
                       />
+                    </button>
+                    <button onClick={() => { setEdit(p); setOpen(true); }} className="btn btn-ghost btn-sm !px-2" title="Edit">
+                      <Pencil size={13} />
                     </button>
                     <button onClick={() => remove(p)} className="btn btn-ghost btn-sm !px-2" title="Delete">
                       <Trash2 size={13} />

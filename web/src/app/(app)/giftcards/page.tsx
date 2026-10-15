@@ -107,6 +107,15 @@ export default function GiftCardsPage() {
                   </button>
                 </div>
                 <div className="mono text-[20px] font-semibold my-3">{money(c.balance, currency)}</div>
+                {/* Scannable barcode (CODE128) */}
+                <div className="rounded-md bg-white p-1.5 mb-2">
+                  <img
+                    src={`https://barcodeapi.org/api/128/${encodeURIComponent(c.code)}`}
+                    alt={c.code}
+                    className="w-full h-10 object-contain"
+                    onError={(e) => { (e.currentTarget.style.display = "none"); }}
+                  />
+                </div>
                 <div className="flex items-center gap-2 mb-2">
                   <code className="font-mono text-[13px] tracking-wider">{c.code}</code>
                   <button

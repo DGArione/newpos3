@@ -10,6 +10,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
 import { Order } from "@/lib/types";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
+import { printReceipt } from "@/lib/receipt";
 
 function PaymentInner() {
   const params = useSearchParams();
@@ -84,6 +85,8 @@ function PaymentInner() {
       setConfirm(null);
       if (updated.paymentStatus === "paid") {
         toast.push("ok", `${updated.displayNum} paid${changeGiven > 0 ? ` · change ${money(changeGiven, currency)}` : ""}`);
+        // Auto-print the customer bill once settled.
+        printReceipt(updated, settings, { tendered: confirm.method === "cash" ? tenderedNum : undefined });
         load();
       } else {
         toast.push("info", `Recorded ${money(confirm.amount, currency)} — balance remains`);
@@ -95,7 +98,7 @@ function PaymentInner() {
 
   function printBill() {
     if (!selected) return;
-    printReceipt(selected, currency, settings?.businessName || "Golden Beach");
+    printReceipt(selected, settings, { tendered: tenderedNum > 0 ? tenderedNum : undefined });
   }
 
   const quick = selected ? [due, 1000, 2000, 5000] : [];
@@ -251,8 +254,10 @@ function PaymentInner() {
                         <div className="text-[32px] font-semibold text-ink mono mt-1 leading-none">{money(due, currency)}</div>
                       </div>
 
-                      <input className="inp text-center text-xl mono !py-2.5 mb-2" inputMode="numeric" placeholder="0"
-                        value={tendered} onChange={(e) => setTendered(e.target.value.replace(/[^\d.]/g, ""))} />
+                      <input className="inp text-center text-xl mono !py-2.5 mb-2" inputMode="numeric" placeholder="Enter cash given"
+                        autoFocus key={selected.id}
+                        value={tendered} onChange={(e) => setTendered(e.target.value.replace(/[^\d.]/g, ""))}
+                        onKeyDown={(e) => { if (e.key === "Enter" && tenderedNum >= due) requestPay("cash"); }} />
 
                       <div className="grid grid-cols-4 gap-1.5 mb-2">
                         {quick.map((amt, i) => (
@@ -464,45 +469,6 @@ function LoyaltyModal({ order, currency, onClose, onDone }: { order: Order; curr
       </div>
     </Modal>
   );
-}
-
-/* ------------------------- Receipt print helper ------------------------- */
-function printReceipt(o: Order, currency: string, biz: string) {
-  const win = window.open("", "_blank", "width=380,height=720");
-  if (!win) { alert("Pop-up blocked. Allow pop-ups to print."); return; }
-  const esc = (s: string) => String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
-  const lines = o.items.map((it) =>
-    `<tr><td>${it.qty}×</td><td>${esc(it.name)}</td><td style="text-align:right">${currency}${it.lineTotal.toFixed(2)}</td></tr>` +
-    (it.modifiers?.map((m) => `<tr><td></td><td colspan="2" style="padding-left:14px;color:#777;font-size:11px">+ ${esc(m.option)}</td></tr>`).join("") || "")
-  ).join("");
-  win.document.write(`<!doctype html><html><head><title>${esc(o.displayNum)} — ${esc(biz)}</title>
-    <style>
-      body { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; margin: 10px; }
-      h2 { text-align: center; margin: 4px 0; font-size: 16px; }
-      .m { text-align: center; font-size: 11px; color: #555; margin: 2px 0; }
-      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-      td { padding: 2px 0; vertical-align: top; }
-      .totals td { border-top: 1px dashed #999; padding-top: 4px; }
-      .big { font-size: 16px; font-weight: 700; border-top: 2px solid #000; padding-top: 4px; }
-      .foot { text-align: center; margin-top: 18px; font-size: 11px; color: #666; }
-    </style></head><body>
-    <h2>${esc(biz)}</h2>
-    <div class="m">${esc(o.displayNum)}</div>
-    <div class="m">${esc(o.tableName || o.orderType)}${o.customerName ? " · " + esc(o.customerName) : ""}</div>
-    <div class="m">${(o.createdAt || "").replace("T", " ")}</div>
-    <table>${lines}</table>
-    <table class="totals">
-      <tr><td>Subtotal</td><td></td><td style="text-align:right">${currency}${o.subtotal.toFixed(2)}</td></tr>
-      ${o.discount > 0 ? `<tr><td>Discount</td><td></td><td style="text-align:right">−${currency}${o.discount.toFixed(2)}</td></tr>` : ""}
-      ${o.serviceCharge > 0 ? `<tr><td>Service</td><td></td><td style="text-align:right">${currency}${o.serviceCharge.toFixed(2)}</td></tr>` : ""}
-      ${o.vat > 0 ? `<tr><td>VAT</td><td></td><td style="text-align:right">${currency}${o.vat.toFixed(2)}</td></tr>` : ""}
-      <tr class="big"><td>Total</td><td></td><td style="text-align:right">${currency}${(o.grandTotal || o.total).toFixed(2)}</td></tr>
-      ${o.amountPaid ? `<tr><td>Paid</td><td></td><td style="text-align:right">${currency}${o.amountPaid.toFixed(2)}</td></tr>` : ""}
-    </table>
-    <p class="foot">Thank you!</p>
-    <script>window.onload=()=>{setTimeout(()=>window.print(),200);}</script>
-    </body></html>`);
-  win.document.close();
 }
 
 export default function PaymentPage() {

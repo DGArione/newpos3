@@ -8,9 +8,16 @@ import {
   QrCode, Receipt, FileWarning,
 } from "lucide-react";
 import Link from "next/link";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, PageLoader, Screen, useToast, Modal, EmptyState } from "@/components/ui";
+
+/** Build an API URL that carries the auth token (for plain <a> downloads). */
+function authUrl(path: string) {
+  const t = getToken();
+  const sep = path.includes("?") ? "&" : "?";
+  return `/api${path}${t ? `${sep}_auth=${encodeURIComponent(t)}` : ""}`;
+}
 
 interface AdminUser {
   id: number;
@@ -86,13 +93,13 @@ export default function AdminPage() {
         <div className="eyebrow mb-3">System</div>
         <div className="grid sm:grid-cols-3 gap-2 mb-5">
           <button onClick={backupDb} className="btn btn-soft"><Database size={14} /> Backup DB</button>
-          <a href="/api/settings/export" target="_blank" rel="noreferrer" className="btn btn-ghost">
+          <a href={authUrl("/settings/export")} target="_blank" rel="noreferrer" className="btn btn-ghost">
             <Download size={14} /> Export settings
           </a>
-          <a href="/api/settings/health" target="_blank" rel="noreferrer" className="btn btn-ghost">
+          <a href={authUrl("/settings/health")} target="_blank" rel="noreferrer" className="btn btn-ghost">
             <Server size={14} /> Health check
           </a>
-          <a href="/api/fiscal/export" target="_blank" rel="noreferrer" className="btn btn-ghost">
+          <a href={authUrl("/fiscal/export")} target="_blank" rel="noreferrer" className="btn btn-ghost">
             <Receipt size={14} /> Fiscal export
           </a>
           <button

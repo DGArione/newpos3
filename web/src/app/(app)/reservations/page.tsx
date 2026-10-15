@@ -49,19 +49,30 @@ export default function ReservationsPage() {
   const [tables, setTables] = useState<TableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [all, setAll] = useState<Reservation[]>([]);
+  const [month, setMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       apiGet<Reservation[]>(`/reservations?date=${date}`),
       apiGet<TableRow[]>("/tables"),
+      apiGet<Reservation[]>(`/reservations`),
     ])
-      .then(([r, t]) => { setList(Array.isArray(r) ? r : []); setTables(Array.isArray(t) ? t : []); })
+      .then(([r, t, a]) => {
+        setList(Array.isArray(r) ? r : []);
+        setTables(Array.isArray(t) ? t : []);
+        setAll(Array.isArray(a) ? a : []);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [date]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Count bookings per date in the visible month.
+  const countByDate: Record<string, number> = {};
+  for (const r of all) countByDate[r.reserveDate] = (countByDate[r.reserveDate] || 0) + 1;
 
   async function setStatus(r: Reservation, status: Reservation["status"]) {
     try {
@@ -80,7 +91,21 @@ export default function ReservationsPage() {
   return (
     <div className="flex flex-col gap-3">
       <Screen>
-        <PageHeader title="Reservations" subtitle="Table bookings" icon={CalendarCheck}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="eyebrow flex items-center gap-2"><CalendarCheck size={13} /> Booking calendar</div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setMonth((p) => { const m = p.m - 1; return m < 0 ? { y: p.y - 1, m: 11 } : { y: p.y, m }; })} className="btn btn-ghost btn-sm !px-2">‹</button>
+            <span className="text-[13px] font-semibold text-ink min-w-[120px] text-center">
+              {new Date(month.y, month.m).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+            </span>
+            <button onClick={() => setMonth((p) => { const m = p.m + 1; return m > 11 ? { y: p.y + 1, m: 0 } : { y: p.y, m }; })} className="btn btn-ghost btn-sm !px-2">›</button>
+          </div>
+        </div>
+        <Calendar y={month.y} m={month.m} selected={date} counts={countByDate} onPick={setDate} />
+      </Screen>
+
+      <Screen>
+        <PageHeader title="Reservations" subtitle={`${new Date(date).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })} · ${list.length} booking${list.length === 1 ? "" : "s"}`} icon={CalendarCheck}>
           <input
             type="date"
             value={date}
@@ -219,5 +244,54 @@ function BookingModal({
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** Month calendar with per-day booking counts; click a day to filter. */
+function Calendar({ y, m, selected, counts, onPick }: {
+  y: number; m: number; selected: string; counts: Record<string, number>; onPick: (d: string) => void;
+}) {
+  const first = new Date(y, m, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const fmt = (d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return (
+    <div>
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div key={d} className="text-center text-[10.5px] font-semibold uppercase tracking-wider text-muted py-1">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={i} />;
+          const ds = fmt(d);
+          const n = counts[ds] || 0;
+          const isSel = ds === selected;
+          const isToday = ds === todayStr;
+          return (
+            <button key={i} onClick={() => onPick(ds)}
+              className="aspect-square rounded-lg flex flex-col items-center justify-center transition-colors relative"
+              style={{
+                background: isSel ? "var(--olive)" : n > 0 ? "var(--olive-wash)" : "var(--panel-2)",
+                color: isSel ? "#fff" : "var(--ink)",
+                border: isToday && !isSel ? "1.5px solid var(--olive)" : "1px solid transparent",
+              }}>
+              <span className="text-[13px] font-semibold">{d}</span>
+              {n > 0 && (
+                <span className="text-[9px] font-bold mt-0.5 px-1 rounded-full"
+                  style={{ background: isSel ? "rgba(255,255,255,.25)" : "var(--olive)", color: "#fff" }}>
+                  {n}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

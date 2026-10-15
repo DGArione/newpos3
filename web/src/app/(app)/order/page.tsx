@@ -174,6 +174,19 @@ function OrderInner() {
 
   const subtotal = cart.reduce((s, c) => s + c.lineTotal, 0);
 
+  // Live promotion preview — the backend auto-applies the best promo on send,
+  // this just shows the customer/cashier what will come off.
+  const [promo, setPromo] = useState<{ name: string; amount: number } | null>(null);
+  useEffect(() => {
+    if (!cart.length) { setPromo(null); return; }
+    const t = setTimeout(() => {
+      apiPost<{ promo: { name: string; amount: number } | null }>("/promotions/preview", {
+        items: cart.map((c) => ({ menuItemId: c.menuItemId, qty: c.qty, lineTotal: c.lineTotal })),
+      }).then((r) => setPromo(r.promo && r.promo.amount > 0 ? r.promo : null)).catch(() => setPromo(null));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [cart]);
+
   async function send(thenPay: boolean) {
     if (!cart.length || sending) return;
     setSending(true);
@@ -436,6 +449,15 @@ function OrderInner() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
+          {promo && (
+            <div className="flex items-center justify-between mb-2 rounded-lg px-3 py-1.5"
+              style={{ background: "var(--ok-wash)", color: "var(--ok)" }}>
+              <span className="text-[12px] font-semibold flex items-center gap-1.5">
+                <Flame size={12} /> {promo.name}
+              </span>
+              <span className="mono font-semibold text-[12.5px]">− {money(promo.amount, currency)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-2">
             <button
               onClick={() => setPriority(!priority)}
@@ -444,8 +466,8 @@ function OrderInner() {
               <Flame size={13} /> {priority ? "Priority" : "Normal"}
             </button>
             <div className="text-[12px] text-muted">
-              Subtotal
-              <span className="mono font-semibold text-ink ml-2">{money(subtotal, currency)}</span>
+              {promo ? "After promo" : "Subtotal"}
+              <span className="mono font-semibold text-ink ml-2">{money(Math.max(0, subtotal - (promo?.amount || 0)), currency)}</span>
             </div>
           </div>
 

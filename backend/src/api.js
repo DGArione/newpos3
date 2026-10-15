@@ -332,6 +332,25 @@ function handle(ctx) {
     jsonOut(rows.map((r) => ({ id: int(r.id), name: r.name })));
   }
 
+  // Public reservation request (no login). Lands as a 'booked' reservation
+  // that a manager / super manager can confirm from the Reservations screen.
+  if (method === 'POST' && uri === '/public/reservation') {
+    const rbid = has(body.branchId) ? int(body.branchId)
+      : int((db.query("SELECT id FROM branches WHERE status='active' ORDER BY id LIMIT 1").fetch() || {}).id);
+    if (!rbid) err('No branch available', 400);
+    const name = truncate(body.customerName || '', 200).trim();
+    const phone = truncate(body.customerPhone || '', 50).trim();
+    if (!name && !phone) err('A name or phone is required', 400);
+    const date = truncate(body.reserveDate || '', 10).trim();
+    const time = truncate(body.reserveTime || '', 5).trim();
+    if (!date || !time) err('Date and time are required', 400);
+    db.prepare('INSERT INTO reservations (branchId,customerName,customerPhone,partySize,reserveDate,reserveTime,tableId,tableName,status,note,createdByName) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .execute([rbid, name, phone, Math.max(1, int(body.partySize) || 1), date, time, null, '', 'booked', truncate(body.note || '', 500), 'Online']);
+    const rid = db.lastInsertId();
+    addNotification({ branchId: rbid, type: 'reservation', message: `New online booking: ${name || phone} · ${date} ${time} · party ${Math.max(1, int(body.partySize) || 1)}`, targetRole: 'manager' });
+    jsonOut({ ok: true, id: rid }, 201);
+  }
+
   // ── PUBLIC QR TABLE ORDERING (no login) ──────────────────
   // Resolve a table's QR token → the branch + table the guest scanned.
   if (method === 'GET' && uri === '/public/table') {
