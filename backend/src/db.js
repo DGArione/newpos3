@@ -434,6 +434,8 @@ function migrate() {
   addCol('settings', 'homeBanners', "TEXT DEFAULT '[]'");
   // Branch photo for the branch picker / page.
   addCol('branches', 'imageUrl', "TEXT DEFAULT ''");
+  // Preferred supplier per ingredient (link suppliers → ingredients).
+  addCol('ingredients', 'supplierId', "INTEGER DEFAULT NULL");
   // Separate approval PIN for managers (used to authorise discounts/voids/
   // refunds), kept distinct from the login PIN.
   addCol('users', 'approvalPin', 'TEXT DEFAULT NULL');

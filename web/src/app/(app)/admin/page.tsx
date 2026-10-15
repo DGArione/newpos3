@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Shield, Users as UsersIcon, Key, KeyRound, Lock, Pause, Play,
   RefreshCw, ScrollText, Package, Download, Upload, Database,
+  AlertTriangle, Server, Settings as SettingsIcon, Store, Printer,
+  QrCode, Receipt, FileWarning,
 } from "lucide-react";
+import Link from "next/link";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, PageLoader, Screen, useToast, Modal, EmptyState } from "@/components/ui";
@@ -86,9 +89,33 @@ export default function AdminPage() {
           <a href="/api/settings/export" target="_blank" rel="noreferrer" className="btn btn-ghost">
             <Download size={14} /> Export settings
           </a>
-          <button className="btn btn-ghost" disabled title="Import coming soon">
-            <Upload size={14} /> Import settings
+          <a href="/api/settings/health" target="_blank" rel="noreferrer" className="btn btn-ghost">
+            <Server size={14} /> Health check
+          </a>
+          <a href="/api/fiscal/export" target="_blank" rel="noreferrer" className="btn btn-ghost">
+            <Receipt size={14} /> Fiscal export
+          </a>
+          <button
+            onClick={async () => {
+              if (!confirm("⚠️ Wipe all orders / shifts / petty cash / messages (keeps users, menu, settings)? Cannot be undone.")) return;
+              try { await apiPost("/settings/reset-test-data"); toast.push("ok", "Test data cleared"); load(); }
+              catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
+            }}
+            className="btn btn-danger"
+          >
+            <AlertTriangle size={14} /> Clear test data
           </button>
+          <Link href="/settings" className="btn btn-ghost">
+            <SettingsIcon size={14} /> Open Settings
+          </Link>
+        </div>
+
+        {/* Shortcuts to common admin tasks */}
+        <div className="eyebrow mb-3">Shortcuts</div>
+        <div className="grid sm:grid-cols-3 gap-2 mb-5">
+          <Link href="/branches" className="btn btn-ghost"><Store size={14} /> Branches</Link>
+          <Link href="/menu-admin" className="btn btn-ghost"><Package size={14} /> Menu, categories, stations</Link>
+          <Link href="/audit" className="btn btn-ghost"><FileWarning size={14} /> Change audit log</Link>
         </div>
       </Screen>
 

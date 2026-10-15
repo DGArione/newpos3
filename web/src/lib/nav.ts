@@ -60,9 +60,11 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export const ROLE_VISIBILITY: Record<Role, string[]> = {
-  admin: ["dashboard", "settings", "auditlog", "staff", "admin", "profile", "messages"],
+  // Settings is admin-only — admins and super managers see it.
+  // Admin page is also for admins + super managers (user management, DB maintenance).
+  admin:        ["dashboard", "settings", "auditlog", "staff", "admin", "profile", "messages", "branches"],
   superManager: ["dashboard","branches","order","floor","kitchen","onlineorders","payment","menuadmin","inventory","suppliers","purchases","history","reports","timeclock","payroll","staff","zreport","pettycash","messages","customers","auditlog","loyalty","giftcards","promotions","reservations","admin","profile","settings"],
-  manager:      ["dashboard","order","floor","kitchen","onlineorders","payment","menuadmin","inventory","suppliers","purchases","history","reports","timeclock","payroll","staff","zreport","pettycash","messages","customers","auditlog","loyalty","giftcards","promotions","reservations","profile","settings"],
+  manager:      ["dashboard","order","floor","kitchen","onlineorders","payment","menuadmin","inventory","suppliers","purchases","history","reports","timeclock","payroll","staff","zreport","pettycash","messages","customers","auditlog","loyalty","giftcards","promotions","reservations","profile"],
   finance:      ["dashboard","history","reports","inventory","suppliers","purchases","timeclock","payroll","zreport","pettycash","messages","customers","profile"],
   server:       ["order","floor","kitchen","payment","history","timeclock","messages","customers","loyalty","giftcards","reservations","profile"],
   cashier:      ["payment","history","timeclock","messages","customers","loyalty","giftcards","profile"],

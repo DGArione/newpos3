@@ -16,7 +16,9 @@ interface Ingredient {
   qty: number;
   unitCost: number;
   lowStockThreshold: number;
+  supplierId?: number | null;
 }
+interface Supplier { id: number; name: string }
 interface Movement {
   id: number;
   ingredientId: number;
@@ -28,6 +30,7 @@ interface Movement {
   createdAt?: string;
 }
 interface Branch { id: number; name: string }
+// (Supplier interface above)
 
 export default function InventoryPage() {
   const toast = useToast();
@@ -36,6 +39,7 @@ export default function InventoryPage() {
   const [list, setList]       = useState<Ingredient[]>([]);
   const [moves, setMoves]     = useState<Movement[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState<"stock" | "movements">("stock");
   const [addOpen, setAddOpen] = useState(false);
@@ -48,11 +52,13 @@ export default function InventoryPage() {
       apiGet<Ingredient[]>("/inventory"),
       apiGet<Movement[]>("/inventory/movements"),
       apiGet<Branch[]>("/branches").catch(() => []),
+      apiGet<Supplier[]>("/suppliers").catch(() => []),
     ])
-      .then(([inv, mv, br]) => {
+      .then(([inv, mv, br, sp]) => {
         setList(Array.isArray(inv) ? inv : []);
         setMoves(Array.isArray(mv) ? mv : []);
         setBranches(Array.isArray(br) ? br : []);
+        setSuppliers(Array.isArray(sp) ? sp : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -103,6 +109,7 @@ export default function InventoryPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {list.map((it) => {
               const low = it.lowStockThreshold > 0 && it.qty <= it.lowStockThreshold;
+              const sup = suppliers.find((s) => s.id === it.supplierId);
               return (
                 <div
                   key={it.id}
@@ -118,6 +125,7 @@ export default function InventoryPage() {
                       <div className="font-semibold text-[14.5px] text-ink truncate">{it.name}</div>
                       <div className="text-[11.5px] text-muted">
                         {it.unitCost > 0 ? `${money(it.unitCost, currency)} / ${it.unit}` : it.unit}
+                        {sup && <> · {sup.name}</>}
                       </div>
                     </div>
                     {low && <span className="pill pill-warn"><AlertTriangle size={11} /> Low</span>}
@@ -182,6 +190,7 @@ export default function InventoryPage() {
       {addOpen && (
         <AddItem
           currency={currency}
+          suppliers={suppliers}
           onClose={() => setAddOpen(false)}
           onDone={() => { setAddOpen(false); load(); toast.push("ok", "Ingredient added"); }}
         />
@@ -213,9 +222,9 @@ const TYPE_PILL: Record<string, string> = {
   purchase:"pill-ok",
 };
 
-function AddItem({ currency, onClose, onDone }: { currency: string; onClose: () => void; onDone: () => void }) {
+function AddItem({ currency, suppliers, onClose, onDone }: { currency: string; suppliers: Supplier[]; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [f, setF] = useState({ name: "", unit: "pcs", qty: "", unitCost: "", lowStockThreshold: "" });
+  const [f, setF] = useState({ name: "", unit: "pcs", qty: "", unitCost: "", lowStockThreshold: "", supplierId: "" });
   const [busy, setBusy] = useState(false);
   async function save() {
     if (!f.name.trim()) { toast.push("bad", "Name required"); return; }
@@ -227,6 +236,7 @@ function AddItem({ currency, onClose, onDone }: { currency: string; onClose: () 
         qty: Number(f.qty) || 0,
         unitCost: Number(f.unitCost) || 0,
         lowStockThreshold: Number(f.lowStockThreshold) || 0,
+        supplierId: f.supplierId ? Number(f.supplierId) : null,
       });
       onDone();
     } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); setBusy(false); }
@@ -245,6 +255,12 @@ function AddItem({ currency, onClose, onDone }: { currency: string; onClose: () 
             <input className="inp mono" inputMode="decimal" value={f.unitCost} onChange={(e) => setF({ ...f, unitCost: e.target.value })} /></div>
           <div><label className="lbl">Low-stock at</label>
             <input className="inp mono" inputMode="decimal" value={f.lowStockThreshold} onChange={(e) => setF({ ...f, lowStockThreshold: e.target.value })} /></div>
+        </div>
+        <div><label className="lbl">Preferred supplier (optional)</label>
+          <select className="inp" value={f.supplierId} onChange={(e) => setF({ ...f, supplierId: e.target.value })}>
+            <option value="">— None —</option>
+            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
         </div>
         <button onClick={save} disabled={busy} className="btn btn-primary w-full">
           {busy ? "Saving…" : "Add ingredient"}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Plus, Minus, Trash2, Flame, Send, CreditCard, ShoppingBag,
@@ -63,8 +63,25 @@ function OrderInner() {
   const [custLookupOpen, setCustLookupOpen] = useState(false);
   const [heldOpen, setHeldOpen] = useState(false);
   const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   const canManageSeq = user?.role === "manager" || user?.role === "superManager";
+
+  // Keyboard shortcuts: F2 search, F4 send to kitchen, F8 send & pay, F9 hold.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const inField = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+      if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); }
+      else if (e.key === "F4" && !inField) { e.preventDefault(); send(false); }
+      else if (e.key === "F8" && !inField) { e.preventDefault(); send(true); }
+      else if (e.key === "F9" && !inField) { e.preventDefault(); holdOrder(); }
+      else if (e.key === "/" && !inField) { e.preventDefault(); searchRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, orderType, tableId, cust, note, priority, sending]);
 
   const loadHeld = useCallback(() => {
     apiGet<HeldOrder[]>("/held-orders").then((d) => setHeldOrders(Array.isArray(d) ? d : [])).catch(() => {});
@@ -218,7 +235,17 @@ function OrderInner() {
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 max-w-md min-w-[200px]">
             <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <input className="inp pl-9" placeholder="Search dish or PLU…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input
+              ref={searchRef}
+              className="inp pl-9 pr-16"
+              placeholder="Search dish or PLU…  (F2)"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              autoFocus
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10.5px] font-semibold text-muted">
+              F2
+            </span>
           </div>
 
           {/* Customer chip or button */}

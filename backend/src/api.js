@@ -656,11 +656,15 @@ function handle(ctx) {
   }
   if (method === 'POST' && uri === '/menu') {
     requireRole(['superManager', 'manager'], user);
+    // Images may be data URLs (base64) — allow up to 3 MB.
+    const imageUrl = truncate(body.imageUrl || '', 3_000_000);
+    const modifiers = Array.isArray(body.modifiers) ? JSON.stringify(body.modifiers) : '[]';
+    const recipe = Array.isArray(body.recipe) ? JSON.stringify(body.recipe) : '[]';
     db.prepare('INSERT INTO menu_items (branchId,name,price,category,plu,imageUrl,stationId,recipe,modifiers) VALUES (?,?,?,?,?,?,?,?,?)')
       .execute([
         bid, truncate(body.name || '', 300), flt(body.price || 0), truncate(body.category || '', 100),
-        body.plu ? truncate(body.plu, 50) : null, truncate(body.imageUrl || '', 2000),
-        body.stationId ? int(body.stationId) : null, '[]', '[]',
+        body.plu ? truncate(body.plu, 50) : null, imageUrl,
+        body.stationId ? int(body.stationId) : null, recipe, modifiers,
       ]);
     const id = db.lastInsertId();
     const f = db.prepare('SELECT * FROM menu_items WHERE id=?'); f.execute([id]);
@@ -2214,8 +2218,8 @@ function handle(ctx) {
   }
   if (method === 'POST' && uri === '/inventory') {
     requireRole(['superManager', 'manager'], user);
-    db.prepare('INSERT INTO ingredients (branchId,name,unit,qty,unitCost,lowStockThreshold) VALUES (?,?,?,?,?,?)')
-      .execute([bid, truncate(body.name || '', 200), truncate(body.unit || 'pcs', 30), flt(body.qty || 0), flt(body.unitCost || 0), flt(body.lowStockThreshold || 0)]);
+    db.prepare('INSERT INTO ingredients (branchId,name,unit,qty,unitCost,lowStockThreshold,supplierId) VALUES (?,?,?,?,?,?,?)')
+      .execute([bid, truncate(body.name || '', 200), truncate(body.unit || 'pcs', 30), flt(body.qty || 0), flt(body.unitCost || 0), flt(body.lowStockThreshold || 0), body.supplierId ? int(body.supplierId) : null]);
     const f = db.prepare('SELECT * FROM ingredients WHERE id=?'); f.execute([db.lastInsertId()]);
     jsonOut(ingredientRow(f.fetch()), 201);
   }
@@ -2223,7 +2227,7 @@ function handle(ctx) {
     const iId = int(params.id);
     if (method === 'PUT') {
       requireRole(['superManager', 'manager'], user);
-      const [sets, vals] = buildSet(body, ['name', 'unit', 'qty', 'unitCost', 'lowStockThreshold']);
+      const [sets, vals] = buildSet(body, ['name', 'unit', 'qty', 'unitCost', 'lowStockThreshold', 'supplierId']);
       if (sets) db.prepare(`UPDATE ingredients SET ${sets} WHERE id=?`).execute([...vals, iId]);
       const f = db.prepare('SELECT * FROM ingredients WHERE id=?'); f.execute([iId]);
       jsonOut(ingredientRow(f.fetch()));

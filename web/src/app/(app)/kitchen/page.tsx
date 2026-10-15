@@ -10,8 +10,10 @@ import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { Order, Station } from "@/lib/types";
 import { PageHeader, PageLoader, EmptyState, useToast, Modal } from "@/components/ui";
 
-const ACTIVE   = ["pending", "preparing", "ready"];
-const FINISHED = ["dispatched", "completed", "voided"];
+// Live = things the kitchen still needs to cook.
+// Ready items leave Live immediately — they are the server's to pick up.
+const ACTIVE   = ["pending", "preparing"];
+const FINISHED = ["ready", "dispatched", "completed", "voided"];
 
 type View = "active" | "done";
 

@@ -322,6 +322,7 @@ function ingredientRow(r) {
     qty: parseFloat(r.qty),
     unitCost: parseFloat(r.unitCost || 0),
     lowStockThreshold: parseFloat(r.lowStockThreshold),
+    supplierId: r.supplierId ? parseInt(r.supplierId, 10) : null,
   });
 }
 function settingsRow(r) {

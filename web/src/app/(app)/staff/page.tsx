@@ -10,6 +10,7 @@ import { money, useSettings } from "@/lib/settings";
 import { useAuth } from "@/lib/auth";
 import { Role } from "@/lib/api";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
+import { KeyRound as KeyRoundIcon, Lock as LockIcon } from "lucide-react";
 
 interface User {
   id: number;
@@ -52,6 +53,8 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [pinOf, setPinOf] = useState<User | null>(null);
+  const [passOf, setPassOf] = useState<User | null>(null);
+  const [authOf, setAuthOf] = useState<User | null>(null);
 
   const load = () =>
     apiGet<User[]>("/users")
@@ -79,6 +82,15 @@ export default function StaffPage() {
     try {
       await apiPost(`/admin/users/${u.id}/reset-pin`, { pin });
       toast.push("ok", `PIN reset for ${u.name}`);
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
+  }
+
+  async function resetPassword(u: User) {
+    const pass = prompt(`New temporary password for ${u.name} (6+ chars):`);
+    if (!pass || pass.length < 6) return;
+    try {
+      await apiPost(`/admin/users/${u.id}/reset-password`, { tempPassword: pass });
+      toast.push("ok", `Password reset for ${u.name}. They must change on next sign-in.`);
     } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); }
   }
 
@@ -136,9 +148,16 @@ export default function StaffPage() {
                     </td>
                     <td className="text-right pr-4">
                       <div className="flex gap-1 justify-end">
-                        {u.authMethod === "pin" && (
+                        <button onClick={() => setAuthOf(u)} className="btn btn-ghost btn-sm !px-2" title="Change sign-in method (PIN ↔ username/password)">
+                          <KeyRoundIcon size={13} />
+                        </button>
+                        {u.authMethod === "pin" ? (
                           <button onClick={() => resetPin(u)} className="btn btn-ghost btn-sm !px-2" title="Reset PIN">
                             <Key size={13} />
+                          </button>
+                        ) : (
+                          <button onClick={() => resetPassword(u)} className="btn btn-ghost btn-sm !px-2" title="Reset password">
+                            <LockIcon size={13} />
                           </button>
                         )}
                         {canHold && (
@@ -164,7 +183,73 @@ export default function StaffPage() {
           onDone={() => { setOpen(false); setLoading(true); load(); toast.push("ok", "User created"); }}
         />
       )}
+
+      {authOf && (
+        <SetAuthModal
+          user={authOf}
+          onClose={() => setAuthOf(null)}
+          onDone={() => { setAuthOf(null); setLoading(true); load(); toast.push("ok", "Sign-in method changed"); }}
+        />
+      )}
     </div>
+  );
+}
+
+function SetAuthModal({ user, onClose, onDone }: { user: User; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [method, setMethod] = useState<"pin" | "password">(user.authMethod as "pin" | "password");
+  const [pin, setPin] = useState("");
+  const [username, setUsername] = useState(user.username || "");
+  const [tempPassword, setTempPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true);
+    try {
+      const payload = method === "pin"
+        ? { authMethod: "pin", pin }
+        : { authMethod: "password", username, tempPassword };
+      await apiPost(`/admin/users/${user.id}/set-auth`, payload);
+      onDone();
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); setBusy(false); }
+  }
+  return (
+    <Modal open title={`Sign-in method — ${user.name}`} onClose={onClose} width={420}>
+      <div className="space-y-3">
+        <div>
+          <label className="lbl">Method</label>
+          <div className="flex gap-1.5 p-1 rounded-full" style={{ background: "var(--panel-2)" }}>
+            {(["pin", "password"] as const).map((m) => (
+              <button key={m} onClick={() => setMethod(m)}
+                className="flex-1 py-1.5 rounded-full text-[12.5px] font-semibold capitalize transition-colors"
+                style={method === m
+                  ? { background: "var(--panel)", color: "var(--olive-700)", boxShadow: "var(--shadow-sm)" }
+                  : { color: "var(--muted)" }}>
+                {m === "pin" ? "Staff PIN" : "Username + password"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {method === "pin" ? (
+          <div><label className="lbl">PIN (4-10 digits)</label>
+            <input className="inp mono tracking-widest" type="password" inputMode="numeric" maxLength={10}
+              value={pin} autoFocus onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} />
+          </div>
+        ) : (
+          <>
+            <div><label className="lbl">Username</label>
+              <input className="inp" value={username} autoFocus onChange={(e) => setUsername(e.target.value)} />
+            </div>
+            <div><label className="lbl">Temporary password (6+ chars)</label>
+              <input className="inp" type="password" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} />
+              <p className="text-[11px] text-muted mt-1">User will be asked to change it on next sign-in.</p>
+            </div>
+          </>
+        )}
+        <button onClick={save} disabled={busy} className="btn btn-primary w-full">
+          {busy ? "Saving…" : "Change sign-in method"}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
