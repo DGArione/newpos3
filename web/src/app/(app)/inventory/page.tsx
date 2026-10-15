@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Plus, Minus, Boxes, AlertTriangle, PackagePlus, Trash2, ArrowLeftRight,
-  History as HistoryIcon, Flame,
+  History as HistoryIcon, Flame, Pencil,
 } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
 
@@ -43,6 +43,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab]         = useState<"stock" | "movements">("stock");
   const [addOpen, setAddOpen] = useState(false);
+  const [editOf, setEditOf]   = useState<Ingredient | null>(null);
   const [wasteOf, setWasteOf] = useState<Ingredient | null>(null);
   const [xferOf, setXferOf]   = useState<Ingredient | null>(null);
 
@@ -149,6 +150,9 @@ export default function InventoryPage() {
                     </div>
 
                     <div className="flex gap-1">
+                      <button onClick={() => setEditOf(it)} className="btn btn-ghost btn-sm !px-2" title="Edit (name, price, unit, threshold, supplier)">
+                        <Pencil size={13} />
+                      </button>
                       <button onClick={() => setWasteOf(it)} className="btn btn-ghost btn-sm !px-2" title="Log waste">
                         <Flame size={13} />
                       </button>
@@ -193,6 +197,15 @@ export default function InventoryPage() {
           suppliers={suppliers}
           onClose={() => setAddOpen(false)}
           onDone={() => { setAddOpen(false); load(); toast.push("ok", "Ingredient added"); }}
+        />
+      )}
+      {editOf && (
+        <EditItem
+          item={editOf}
+          currency={currency}
+          suppliers={suppliers}
+          onClose={() => setEditOf(null)}
+          onDone={() => { setEditOf(null); load(); toast.push("ok", "Ingredient updated"); }}
         />
       )}
       {wasteOf && (
@@ -264,6 +277,61 @@ function AddItem({ currency, suppliers, onClose, onDone }: { currency: string; s
         </div>
         <button onClick={save} disabled={busy} className="btn btn-primary w-full">
           {busy ? "Saving…" : "Add ingredient"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function EditItem({ item, currency, suppliers, onClose, onDone }: { item: Ingredient; currency: string; suppliers: Supplier[]; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [f, setF] = useState({
+    name: item.name,
+    unit: item.unit,
+    qty: String(item.qty),
+    unitCost: String(item.unitCost || 0),
+    lowStockThreshold: String(item.lowStockThreshold || 0),
+    supplierId: item.supplierId ? String(item.supplierId) : "",
+  });
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    if (!f.name.trim()) { toast.push("bad", "Name required"); return; }
+    setBusy(true);
+    try {
+      await apiPut(`/inventory/${item.id}`, {
+        name: f.name,
+        unit: f.unit,
+        qty: Number(f.qty) || 0,
+        unitCost: Number(f.unitCost) || 0,
+        lowStockThreshold: Number(f.lowStockThreshold) || 0,
+        supplierId: f.supplierId ? Number(f.supplierId) : null,
+      });
+      onDone();
+    } catch (e) { toast.push("bad", e instanceof Error ? e.message : "Failed"); setBusy(false); }
+  }
+  return (
+    <Modal open title={`Edit — ${item.name}`} onClose={onClose} width={440}>
+      <div className="space-y-3">
+        <div><label className="lbl">Name</label>
+          <input className="inp" autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="lbl">Unit</label>
+            <input className="inp" value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} /></div>
+          <div><label className="lbl">Quantity</label>
+            <input className="inp mono" inputMode="decimal" value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} /></div>
+          <div><label className="lbl">Cost / unit ({currency.trim()})</label>
+            <input className="inp mono" inputMode="decimal" value={f.unitCost} onChange={(e) => setF({ ...f, unitCost: e.target.value })} /></div>
+          <div><label className="lbl">Low-stock at</label>
+            <input className="inp mono" inputMode="decimal" value={f.lowStockThreshold} onChange={(e) => setF({ ...f, lowStockThreshold: e.target.value })} /></div>
+        </div>
+        <div><label className="lbl">Preferred supplier</label>
+          <select className="inp" value={f.supplierId} onChange={(e) => setF({ ...f, supplierId: e.target.value })}>
+            <option value="">— None —</option>
+            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <button onClick={save} disabled={busy} className="btn btn-primary w-full">
+          {busy ? "Saving…" : "Save changes"}
         </button>
       </div>
     </Modal>

@@ -293,6 +293,7 @@ function handle(ctx) {
       defaultOrderType: s.defaultOrderType || 'dine-in',
       loginThemeId: s.loginThemeId || '',
       homeBanners: s.homeBanners || [],
+      accentColor: s.accentColor || '',
     });
   }
 
@@ -552,10 +553,10 @@ function handle(ctx) {
       'homeBanners',
     ];
     // Normalise homeBanners: accept an array and serialise it to JSON for the DB.
-    if (body && Array.isArray(body.homeBanners)) {
-      body = Object.assign({}, body, { homeBanners: JSON.stringify(body.homeBanners) });
-    }
-    const [sets, vals] = buildSet(body, allowed);
+    const settingsBody = Array.isArray(body.homeBanners)
+      ? Object.assign({}, body, { homeBanners: JSON.stringify(body.homeBanners) })
+      : body;
+    const [sets, vals] = buildSet(settingsBody, allowed);
     if (sets) db.prepare(`UPDATE settings SET ${sets} WHERE id=1`).execute(vals);
     jsonOut(getSettings(true));
   }
@@ -768,14 +769,11 @@ function handle(ctx) {
     const mId = int(params.id);
     if (method === 'PUT') {
       requireRole(['superManager', 'manager'], user);
-      // Serialise modifiers + recipe to JSON for the DB.
-      if (body && Array.isArray(body.modifiers)) {
-        body = Object.assign({}, body, { modifiers: JSON.stringify(body.modifiers) });
-      }
-      if (body && Array.isArray(body.recipe)) {
-        body = Object.assign({}, body, { recipe: JSON.stringify(body.recipe) });
-      }
-      const [sets, vals] = buildSet(body, ['name', 'price', 'category', 'plu', 'imageUrl', 'stationId', 'soldOut', 'tags', 'modifiers', 'recipe']);
+      // Serialise modifiers + recipe to JSON for the DB (local copy — body is const).
+      const menuBody = Object.assign({}, body);
+      if (Array.isArray(menuBody.modifiers)) menuBody.modifiers = JSON.stringify(menuBody.modifiers);
+      if (Array.isArray(menuBody.recipe)) menuBody.recipe = JSON.stringify(menuBody.recipe);
+      const [sets, vals] = buildSet(menuBody, ['name', 'price', 'category', 'plu', 'imageUrl', 'stationId', 'soldOut', 'tags', 'modifiers', 'recipe']);
       if (sets) db.prepare(`UPDATE menu_items SET ${sets} WHERE id=?`).execute([...vals, mId]);
       const f = db.prepare('SELECT * FROM menu_items WHERE id=?'); f.execute([mId]);
       jsonOut(menuRow(f.fetch()));

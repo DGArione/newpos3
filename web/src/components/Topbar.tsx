@@ -227,17 +227,17 @@ export function AppHeader({ onSearch }: { onSearch?: () => void }) {
                 className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-ink hover:bg-panel-2 transition-colors">
                 <UserCog size={15} style={{ color: "var(--muted)" }} /> My profile
               </Link>
-              {(user.role === "admin" || user.role === "superManager") && (
-                <Link href="/admin" onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-ink hover:bg-panel-2 transition-colors">
-                  <Shield size={15} style={{ color: "var(--muted)" }} /> Admin
-                </Link>
-              )}
-              {(user.role === "admin" || user.role === "superManager" || user.role === "manager") && (
-                <Link href="/settings" onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-ink hover:bg-panel-2 transition-colors">
-                  <SettingsIcon size={15} style={{ color: "var(--muted)" }} /> Settings
-                </Link>
+              {user.role === "admin" && (
+                <>
+                  <Link href="/admin" onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-ink hover:bg-panel-2 transition-colors">
+                    <Shield size={15} style={{ color: "var(--muted)" }} /> Admin
+                  </Link>
+                  <Link href="/settings" onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-ink hover:bg-panel-2 transition-colors">
+                    <SettingsIcon size={15} style={{ color: "var(--muted)" }} /> Settings
+                  </Link>
+                </>
               )}
               <button onClick={doLogout}
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] border-t border-line-soft transition-colors hover:bg-bad-wash"

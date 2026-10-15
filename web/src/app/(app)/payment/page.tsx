@@ -26,6 +26,7 @@ function PaymentInner() {
   const [voidOpen, setVoidOpen] = useState(false);
   const [giftCardOpen, setGiftCardOpen] = useState(false);
   const [loyaltyOpen, setLoyaltyOpen] = useState(false);
+  const [confirm, setConfirm] = useState<{ method: "cash" | "card"; amount: number } | null>(null);
 
   const load = useCallback(async (selectId?: number) => {
     try {
@@ -54,20 +55,38 @@ function PaymentInner() {
   const tenderedNum = Number(tendered) || 0;
   const change = tenderedNum > due ? tenderedNum - due : 0;
 
-  async function pay(method: "cash" | "card") {
+  // Step 1: ask to confirm. Cash requires a tendered amount to be entered.
+  function requestPay(method: "cash" | "card") {
     if (!selected) return;
-    const amount = method === "cash" ? Math.min(tenderedNum || due, due) : due;
-    if (amount <= 0) { toast.push("bad", "Enter an amount"); return; }
+    if (method === "cash") {
+      if (!tendered || tenderedNum <= 0) {
+        toast.push("bad", "Enter how much cash the customer gave first");
+        return;
+      }
+      if (tenderedNum < due) {
+        toast.push("bad", `Cash given (${money(tenderedNum, currency)}) is less than the amount due`);
+        return;
+      }
+    }
+    const amount = method === "cash" ? due : due;
+    setConfirm({ method, amount });
+  }
+
+  // Step 2: actually take payment after confirmation.
+  async function doPay() {
+    if (!selected || !confirm) return;
     setBusy(true);
     try {
-      const updated = await apiPost<Order>(`/orders/${selected.id}/pay`, { method, amount });
+      const updated = await apiPost<Order>(`/orders/${selected.id}/pay`, { method: confirm.method, amount: confirm.amount });
       setSelected(updated);
+      const changeGiven = confirm.method === "cash" ? Math.max(0, tenderedNum - confirm.amount) : 0;
       setTendered("");
+      setConfirm(null);
       if (updated.paymentStatus === "paid") {
-        toast.push("ok", `${updated.displayNum} fully paid${change > 0 ? ` · change ${money(change, currency)}` : ""}`);
+        toast.push("ok", `${updated.displayNum} paid${changeGiven > 0 ? ` · change ${money(changeGiven, currency)}` : ""}`);
         load();
       } else {
-        toast.push("info", `Recorded ${money(amount, currency)} — balance remains`);
+        toast.push("info", `Recorded ${money(confirm.amount, currency)} — balance remains`);
       }
     } catch (e) {
       toast.push("bad", e instanceof Error ? e.message : "Payment failed");
@@ -260,10 +279,10 @@ function PaymentInner() {
                       )}
 
                       <div className="grid grid-cols-2 gap-2 mt-auto">
-                        <button onClick={() => pay("cash")} disabled={busy} className="btn btn-soft btn-lg">
+                        <button onClick={() => requestPay("cash")} disabled={busy} className="btn btn-soft btn-lg">
                           <Banknote size={17} /> Cash
                         </button>
-                        <button onClick={() => pay("card")} disabled={busy} className="btn btn-primary btn-lg">
+                        <button onClick={() => requestPay("card")} disabled={busy} className="btn btn-primary btn-lg">
                           <CreditCard size={17} /> Card
                         </button>
                       </div>
@@ -291,6 +310,34 @@ function PaymentInner() {
       {selected && loyaltyOpen && (
         <LoyaltyModal order={selected} currency={currency} onClose={() => setLoyaltyOpen(false)}
           onDone={(o) => { setSelected(o); setLoyaltyOpen(false); toast.push("ok", "Points redeemed"); load(); }} />
+      )}
+
+      {/* Payment confirmation */}
+      {selected && confirm && (
+        <Modal open title="Confirm payment" onClose={() => setConfirm(null)} width={400}>
+          <div className="text-center py-2">
+            <div className="text-[11px] uppercase tracking-wider text-muted">
+              {confirm.method === "cash" ? "Cash payment" : "Card payment"}
+            </div>
+            <div className="text-[34px] font-semibold mono mt-1" style={{ color: "var(--olive-700)" }}>
+              {money(confirm.amount, currency)}
+            </div>
+            <div className="text-[13px] text-muted mt-1">{selected.displayNum} · {selected.tableName || selected.orderType}</div>
+            {confirm.method === "cash" && tenderedNum > 0 && (
+              <div className="mt-3 rounded-xl p-3" style={{ background: "var(--panel-2)" }}>
+                <div className="flex justify-between text-[13px]"><span className="text-muted">Cash given</span><span className="mono font-semibold">{money(tenderedNum, currency)}</span></div>
+                <div className="flex justify-between text-[14px] mt-1"><span className="font-semibold">Change</span>
+                  <span className="mono font-bold" style={{ color: "var(--ok)" }}>{money(Math.max(0, tenderedNum - confirm.amount), currency)}</span></div>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button onClick={() => setConfirm(null)} className="btn btn-ghost flex-1">Cancel</button>
+            <button onClick={doPay} disabled={busy} className="btn btn-primary flex-1">
+              {busy ? "Processing…" : "Confirm & pay"}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

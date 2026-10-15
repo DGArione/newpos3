@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Save, Star, Gift, Tag, CalendarCheck, Image as ImageIcon, Plus, Trash2 } from "lucide-react";
+import { Save, Star, Gift, Tag, CalendarCheck, Image as ImageIcon, Plus, Trash2, Palette, X } from "lucide-react";
 import { apiGet, apiPut, apiPost } from "@/lib/api";
 import { PageHeader, PageLoader, Screen, useToast } from "@/components/ui";
-import { fetchSettings, type HomeBanner } from "@/lib/settings";
+import { fetchSettings, applyAccent, type HomeBanner } from "@/lib/settings";
 
 interface Settings {
   businessName: string;
@@ -19,7 +19,21 @@ interface Settings {
   receiptFooterText: string;
   enabledAddons: string[];
   homeBanners?: HomeBanner[];
+  logoUrl?: string;
+  loginBgUrl?: string;
+  accentColor?: string;
 }
+
+const THEME_PRESETS = [
+  { name: "Golden",   color: "#f6990d" },
+  { name: "Ocean",    color: "#1a6fa8" },
+  { name: "Forest",   color: "#2d7a3e" },
+  { name: "Crimson",  color: "#b91c1c" },
+  { name: "Violet",   color: "#6d28d9" },
+  { name: "Teal",     color: "#0e7490" },
+  { name: "Rose",     color: "#be185d" },
+  { name: "Slate",    color: "#475569" },
+];
 
 const ADDONS = [
   { key: "loyalty",      label: "Loyalty points", icon: Star },
@@ -60,8 +74,12 @@ export default function SettingsPage() {
         cardFeePercent: Number(s.cardFeePercent) || 0,
         receiptFooterText: s.receiptFooterText,
         homeBanners: s.homeBanners || [],
+        logoUrl: s.logoUrl || "",
+        loginBgUrl: s.loginBgUrl || "",
+        accentColor: s.accentColor || "",
       });
       await savedAndRefresh();
+      applyAccent(s.accentColor);
       toast.push("ok", "Settings saved");
     } catch (e) {
       toast.push("bad", e instanceof Error ? e.message : "Save failed");
@@ -136,6 +154,48 @@ export default function SettingsPage() {
         </div>
         <div className="mt-3">
           <Field label="Receipt footer" value={s.receiptFooterText} onChange={(v) => set("receiptFooterText", v)} />
+        </div>
+      </Screen>
+
+      {/* ---- Appearance ---- */}
+      <Screen>
+        <div className="eyebrow mb-4 flex items-center gap-2"><Palette size={14} /> Appearance</div>
+
+        {/* theme presets */}
+        <label className="lbl">Brand / theme colour</label>
+        <div className="flex gap-2 flex-wrap mb-3">
+          {THEME_PRESETS.map((t) => {
+            const active = (s.accentColor || "#f6990d").toLowerCase() === t.color.toLowerCase();
+            return (
+              <button key={t.name} onClick={() => { set("accentColor", t.color); applyAccent(t.color); }}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl border transition-all"
+                style={{
+                  background: active ? t.color : "var(--panel-2)",
+                  color: active ? "#fff" : "var(--ink)",
+                  borderColor: active ? t.color : "var(--line)",
+                }}>
+                <span className="size-4 rounded-full" style={{ background: t.color, boxShadow: active ? "0 0 0 2px #fff inset" : "none" }} />
+                <span className="text-[12.5px] font-semibold">{t.name}</span>
+              </button>
+            );
+          })}
+          {/* custom color */}
+          <label className="flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer"
+            style={{ background: "var(--panel-2)", borderColor: "var(--line)" }}>
+            <input type="color" className="size-5 cursor-pointer border-0 bg-transparent p-0"
+              value={s.accentColor || "#f6990d"}
+              onChange={(e) => { set("accentColor", e.target.value); applyAccent(e.target.value); }} />
+            <span className="text-[12.5px] font-semibold">Custom</span>
+          </label>
+        </div>
+        <p className="text-[11.5px] text-muted mb-5">Preview applies instantly. Press Save changes to keep it.</p>
+
+        {/* logo + login bg */}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <ImageField label="Logo / brand image" hint="Shown on the login card and sidebar"
+            value={s.logoUrl || ""} onChange={(v) => set("logoUrl", v)} />
+          <ImageField label="Login background" hint="Full-screen photo behind the login card"
+            value={s.loginBgUrl || ""} onChange={(v) => set("loginBgUrl", v)} />
         </div>
       </Screen>
 
@@ -259,6 +319,36 @@ function Field({ label, value, onChange, mono }: { label: string; value: string;
     <div>
       <label className="lbl">{label}</label>
       <input className={`inp ${mono ? "mono" : ""}`} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function ImageField({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) {
+  const toast = useToast();
+  function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (file.size > 3_000_000) { toast.push("bad", "Image too large (max 3 MB)"); return; }
+    const r = new FileReader();
+    r.onload = () => onChange(String(r.result));
+    r.readAsDataURL(file);
+  }
+  return (
+    <div>
+      <label className="lbl">{label}</label>
+      <div className="flex gap-3 items-start">
+        <div className="size-20 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+          style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+          {value ? <img src={value} alt="" className="w-full h-full object-cover" /> : <ImageIcon size={24} className="text-muted" />}
+        </div>
+        <div className="flex-1 space-y-2">
+          <label className="btn btn-ghost btn-sm cursor-pointer">
+            <ImageIcon size={13} /> Upload
+            <input type="file" accept="image/*" className="hidden" onChange={pick} />
+          </label>
+          {value && <button onClick={() => onChange("")} className="btn btn-ghost btn-sm"><X size={13} /> Remove</button>}
+          {hint && <div className="text-[11px] text-muted">{hint}</div>}
+        </div>
+      </div>
     </div>
   );
 }

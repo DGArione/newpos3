@@ -65,6 +65,26 @@ function OrderInner() {
   const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
+  // Resizable cart panel width (px). Remembered per terminal.
+  const [cartWidth, setCartWidth] = useState(380);
+  const dragging = useRef(false);
+  useEffect(() => {
+    try { const w = Number(localStorage.getItem("pos-cart-width")); if (w >= 300 && w <= 640) setCartWidth(w); } catch {}
+  }, []);
+  useEffect(() => {
+    function move(e: MouseEvent) {
+      if (!dragging.current) return;
+      const w = Math.min(640, Math.max(300, window.innerWidth - e.clientX - 20));
+      setCartWidth(w);
+    }
+    function up() {
+      if (dragging.current) { dragging.current = false; document.body.style.cursor = ""; try { localStorage.setItem("pos-cart-width", String(cartWidth)); } catch {} }
+    }
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+  }, [cartWidth]);
+
   const canManageSeq = user?.role === "manager" || user?.role === "superManager";
 
   // Keyboard shortcuts: F2 search, F4 send to kitchen, F8 send & pay, F9 hold.
@@ -228,9 +248,9 @@ function OrderInner() {
   const typeTabs: OrderType[] = ["dine-in", "takeaway", "delivery"];
 
   return (
-    <div className="grid lg:grid-cols-[1fr_380px] gap-3 h-full">
+    <div className="flex gap-0 h-full">
       {/* ===== Menu side ===== */}
-      <div className="min-w-0 flex flex-col gap-3 min-h-0">
+      <div className="min-w-0 flex-1 flex flex-col gap-3 min-h-0">
         {/* Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 max-w-md min-w-[200px]">
@@ -325,9 +345,20 @@ function OrderInner() {
         </div>
       </div>
 
+      {/* ===== Drag handle to resize the cart ===== */}
+      <div
+        onMouseDown={() => { dragging.current = true; document.body.style.cursor = "col-resize"; }}
+        className="hidden lg:flex items-center justify-center shrink-0 cursor-col-resize group"
+        style={{ width: 14 }}
+        title="Drag to resize"
+      >
+        <div className="h-16 w-1 rounded-full transition-colors group-hover:bg-[var(--olive)]"
+          style={{ background: "var(--line)" }} />
+      </div>
+
       {/* ===== Cart side (sticky footer always visible) ===== */}
-      <aside className="flex flex-col overflow-hidden rounded-[var(--r-2xl)] max-h-[calc(100vh-100px)]"
-        style={{ background: "var(--panel)", boxShadow: "var(--shadow-sm)" }}>
+      <aside className="flex flex-col overflow-hidden rounded-[var(--r-2xl)] max-h-[calc(100vh-100px)] shrink-0 w-full lg:w-[var(--cart-w)]"
+        style={{ background: "var(--panel)", boxShadow: "var(--shadow-sm)", ["--cart-w" as string]: `${cartWidth}px` }}>
 
         {/* Order type + table + customer form */}
         <div className="p-3 border-b border-line-soft shrink-0">
