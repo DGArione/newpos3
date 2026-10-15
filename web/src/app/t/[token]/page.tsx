@@ -7,7 +7,7 @@
  * Also lets guests request a table reservation.
  */
 
-import { use, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface TableInfo { ok: boolean; branchId: number; branchName: string; branchActive: boolean; tableId: number; tableName: string; businessName: string }
 interface MenuItem { id: number; name: string; price: number; category: string; imageUrl?: string; soldOut?: boolean }
@@ -16,8 +16,10 @@ interface Line { id: number; name: string; price: number; qty: number }
 
 const API = "/api";
 
-export default function TableMenuPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+// Next.js 14: route params arrive as a plain object (not a Promise), so read
+// them directly — don't wrap with React.use().
+export default function TableMenuPage({ params }: { params: { token: string } }) {
+  const { token } = params;
   const [info, setInfo] = useState<TableInfo | null>(null);
   const [menu, setMenu] = useState<MenuResp | null>(null);
   const [err, setErr] = useState("");
