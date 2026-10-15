@@ -249,8 +249,11 @@ function OrderInner() {
 
   return (
     <div className="flex gap-0 h-full">
-      {/* ===== Menu side ===== */}
-      <div className="min-w-0 flex-1 flex flex-col gap-3 min-h-0">
+      {/* ===== Menu side (its own panel for clear separation) ===== */}
+      <div
+        className="min-w-0 flex-1 flex flex-col gap-3 min-h-0 rounded-[var(--r-2xl)] p-3 md:p-4"
+        style={{ background: "var(--panel)", boxShadow: "var(--shadow-sm)" }}
+      >
         {/* Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 max-w-md min-w-[200px]">
@@ -323,8 +326,8 @@ function OrderInner() {
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
             {filtered.map((item) => (
               <button key={item.id} onClick={() => onItemClick(item)}
-                className="rounded-xl p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 min-h-[96px] justify-between"
-                style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+                className="rounded-xl p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 flex flex-col gap-2 min-h-[96px] justify-between hover:border-[var(--olive)]"
+                style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
                 {item.imageUrl && (
                   <div
                     className="w-full h-20 rounded-lg bg-cover bg-center -mt-1 -mx-1 mb-1"
@@ -348,12 +351,18 @@ function OrderInner() {
       {/* ===== Drag handle to resize the cart ===== */}
       <div
         onMouseDown={() => { dragging.current = true; document.body.style.cursor = "col-resize"; }}
-        className="hidden lg:flex items-center justify-center shrink-0 cursor-col-resize group"
-        style={{ width: 14 }}
-        title="Drag to resize"
+        className="hidden lg:flex items-center justify-center shrink-0 cursor-col-resize group mx-1"
+        style={{ width: 16 }}
+        title="Drag to resize the ticket panel"
       >
-        <div className="h-16 w-1 rounded-full transition-colors group-hover:bg-[var(--olive)]"
-          style={{ background: "var(--line)" }} />
+        <div className="h-20 w-1.5 rounded-full transition-colors group-hover:bg-[var(--olive)] flex items-center justify-center"
+          style={{ background: "var(--line)" }}>
+          <span className="flex flex-col gap-0.5">
+            <span className="w-0.5 h-0.5 rounded-full bg-white/70" />
+            <span className="w-0.5 h-0.5 rounded-full bg-white/70" />
+            <span className="w-0.5 h-0.5 rounded-full bg-white/70" />
+          </span>
+        </div>
       </div>
 
       {/* ===== Cart side (sticky footer always visible) ===== */}
@@ -525,37 +534,62 @@ function ModifierModal({ item, currency, onClose, onAdd }: {
   const unit = item.price + mods.reduce((s, m) => s + m.priceDelta, 0);
 
   return (
-    <Modal open title={item.name} onClose={onClose} width={460}>
-      <div className="space-y-3">
+    <Modal open title={item.name} onClose={onClose} width={480}>
+      <div className="space-y-4">
+        {/* price header */}
+        <div className="flex items-center justify-between -mt-1">
+          <span className="text-[12.5px] text-muted">Base price</span>
+          <span className="mono font-semibold text-ink">{money(item.price, currency)}</span>
+        </div>
+
         {groups.map((g) => (
-          <div key={g.name}>
-            <div className="lbl">{g.name}</div>
-            <div className="flex flex-wrap gap-1.5">
+          <div key={g.name} className="rounded-xl p-3" style={{ background: "var(--panel-2)" }}>
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[12.5px] font-semibold text-ink">{g.name}</span>
+              <span className="text-[10.5px] uppercase tracking-wider text-muted">Pick one</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {g.options.map((o) => {
                 const active = picked[g.name] === o.option;
                 return (
                   <button key={o.option}
                     onClick={() => setPicked((p) => ({ ...p, [g.name]: active ? "" : o.option }))}
-                    className="px-3 py-1.5 rounded-full text-[13px] font-medium border transition-colors"
-                    style={active ? { background: "var(--olive)", color: "#ffffff", borderColor: "var(--olive)" } : { background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}>
-                    {o.option}{o.priceDelta ? ` +${money(o.priceDelta, currency)}` : ""}
+                    className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 border-2 transition-all text-left"
+                    style={active
+                      ? { background: "var(--olive-wash)", borderColor: "var(--olive)" }
+                      : { background: "var(--panel)", borderColor: "var(--line)" }}>
+                    <span className="flex items-center gap-1.5 w-full">
+                      <span
+                        className="size-4 rounded-full border-2 shrink-0 flex items-center justify-center"
+                        style={{ borderColor: active ? "var(--olive)" : "var(--input-border)" }}>
+                        {active && <span className="size-2 rounded-full" style={{ background: "var(--olive)" }} />}
+                      </span>
+                      <span className="text-[13px] font-semibold text-ink truncate">{o.option}</span>
+                    </span>
+                    <span className="text-[11.5px] mono pl-5.5" style={{ color: o.priceDelta ? "var(--olive-700)" : "var(--muted)" }}>
+                      {o.priceDelta ? `+ ${money(o.priceDelta, currency)}` : "included"}
+                    </span>
                   </button>
                 );
               })}
             </div>
           </div>
         ))}
+
         <div>
-          <div className="lbl">Note</div>
-          <input className="inp" placeholder="Anything for the kitchen?" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <div className="lbl">Note for the kitchen</div>
+          <input className="inp" placeholder="e.g. no onion, extra spicy…" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
-        <div className="flex items-center justify-between pt-1">
+
+        <div className="flex items-center justify-between pt-1 border-t border-line-soft pt-3">
           <div className="flex items-center gap-2">
-            <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "var(--panel-2)" }}><Minus size={15} /></button>
-            <span className="mono font-semibold w-6 text-center">{qty}</span>
-            <button onClick={() => setQty((q) => q + 1)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "var(--panel-2)" }}><Plus size={15} /></button>
+            <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="size-9 rounded-full flex items-center justify-center transition-colors hover:bg-line" style={{ background: "var(--panel-2)" }}><Minus size={16} /></button>
+            <span className="mono font-semibold w-7 text-center text-[16px]">{qty}</span>
+            <button onClick={() => setQty((q) => q + 1)} className="size-9 rounded-full flex items-center justify-center transition-colors hover:bg-line" style={{ background: "var(--panel-2)" }}><Plus size={16} /></button>
           </div>
-          <button onClick={() => onAdd(mods, qty, notes)} className="btn btn-primary">Add · {money(unit * qty, currency)}</button>
+          <button onClick={() => onAdd(mods, qty, notes)} className="btn btn-primary btn-lg">
+            <Plus size={16} /> Add · {money(unit * qty, currency)}
+          </button>
         </div>
       </div>
     </Modal>
