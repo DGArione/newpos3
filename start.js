@@ -14,6 +14,44 @@
 const { spawn, execSync } = require("node:child_process");
 const net = require("node:net");
 const path = require("node:path");
+const fs = require("node:fs");
+
+// ── Guard against a corrupt native SWC binary ──────────────────────────────
+// Next.js needs an SWC binding even when Babel is configured. On Windows a
+// low-disk `npm install` often truncates the native binary (".node is not a
+// valid Win32 application"), which crashes `next dev`. We ship the WASM SWC
+// fallback as a dependency; if the native binary is present but unloadable,
+// we remove it so Next falls back to WASM cleanly.
+function ensureUsableSwc() {
+  const webModules = path.join(__dirname, "web", "node_modules");
+  const wasmPkg = path.join(webModules, "@next", "swc-wasm-nodejs");
+  const hasWasm = fs.existsSync(wasmPkg);
+  // Find any installed native @next/swc-* package.
+  const nextScope = path.join(webModules, "@next");
+  let nativeDir = null;
+  try {
+    for (const name of fs.readdirSync(nextScope)) {
+      if (name.startsWith("swc-") && name !== "swc-wasm-nodejs") {
+        nativeDir = path.join(nextScope, name);
+        break;
+      }
+    }
+  } catch { return; }
+  if (!nativeDir) return;
+  // Try to load the native binding; if it throws, it's corrupt.
+  let ok = true;
+  try { require(nativeDir); } catch { ok = false; }
+  if (ok) return;
+  if (!hasWasm) {
+    console.log("   ⚠ The native SWC binary looks corrupt and the WASM fallback isn't installed.");
+    console.log("     Run 'npm install' inside the web/ folder (with free disk space) and try again.");
+    return;
+  }
+  try {
+    fs.rmSync(nativeDir, { recursive: true, force: true });
+    console.log("   ⚠ Removed a corrupt native SWC binary — using the WASM fallback instead.");
+  } catch { /* best effort */ }
+}
 
 const PORT_BACKEND = Number(process.env.BACKEND_PORT) || 3001;
 const PORT_WEB     = Number(process.env.PORT) || 3000;
@@ -55,6 +93,7 @@ async function main() {
 
   await freePort(PORT_BACKEND);
   await freePort(PORT_WEB);
+  ensureUsableSwc();
 
   // ── Backend (Express + SQLite) ──────────────────────────────────────
   const backend = spawn(npm, ["start"], {
