@@ -893,6 +893,31 @@ function handle(ctx) {
     // Price and validate every line against the SERVER's menu + modifier rules
     // (never trust client-sent prices, option deltas, or required/min-max).
     const lineItems = items.map((i) => priceAndValidateLine(db, int(bid), i));
+
+    // ── Running tab: add to the table's existing open order ──────────────
+    // For a dine-in table that already has an unpaid, non-voided order, append
+    // the new items to that same bill (one tab per table) instead of opening a
+    // separate order. New lines start 'pending' so the kitchen sees the round.
+    const reqType = body.orderType || 'dine-in';
+    if (reqType === 'dine-in' && body.tableId && body.addToExisting !== false) {
+      const exSt = db.prepare("SELECT * FROM orders WHERE tableId=? AND branchId=? AND paymentStatus!='paid' AND (void_data IS NULL) ORDER BY id DESC LIMIT 1");
+      exSt.execute([int(body.tableId), int(bid)]);
+      const exRaw = exSt.fetch();
+      if (exRaw) {
+        const ex = orderRow(exRaw);
+        const merged = ex.items.concat(lineItems);
+        const promo2 = computeBestPromotion(db, int(bid), merged, getSettings());
+        const totals2 = computeTotals(merged, ex.discount || null, promo2 ? promo2.amount : 0);
+        // status back to 'pending' so the new round shows in the kitchen; leave
+        // per-line inventoryDeducted flags intact (earlier rounds stay deducted).
+        db.prepare("UPDATE orders SET items=?, subtotal=?, serviceCharge=?, vat=?, total=?, status='pending', inventoryDeducted=0, promo_data=? WHERE id=?")
+          .execute([jsonEncode(merged), totals2.subtotal, totals2.serviceCharge, totals2.vat, totals2.total, promo2 ? jsonEncode(promo2) : null, ex.id]);
+        db.prepare("UPDATE tables_list SET status='ordered' WHERE id=?").execute([int(body.tableId)]);
+        const f = db.prepare('SELECT * FROM orders WHERE id=?'); f.execute([ex.id]);
+        jsonOut(orderRow(f.fetch()), 200);
+      }
+    }
+
     // Auto-apply the best active promotion (if any) for this branch.
     const promo = computeBestPromotion(db, int(bid), lineItems, getSettings());
     const totals = computeTotals(lineItems, null, promo ? promo.amount : 0);
@@ -1069,10 +1094,13 @@ function handle(ctx) {
     const status = body.status || '';
     const oSt = db.prepare('SELECT * FROM orders WHERE id=?'); oSt.execute([oid]);
     const o = orderRow(oSt.fetch()); if (!o) err('Not found', 404);
-    if (status === 'ready' && !o.inventoryDeducted) {
+    const allItemsDeducted = o.items.length > 0 && o.items.every((l) => l.inventoryDeducted || false);
+    if (status === 'ready' && !allItemsDeducted) {
       db.beginTransaction();
       try {
-        for (const line of o.items) deductInventoryLine(db, line);
+        // Only deduct lines that haven't already been deducted (a running tab
+        // may have had earlier rounds deducted already) — avoids double counts.
+        for (const line of o.items) if (!(line.inventoryDeducted || false)) deductInventoryLine(db, line);
         const now = isoNow();
         const items = o.items.map((i) => Object.assign({}, i, { status: 'ready', inventoryDeducted: true, readyAt: i.readyAt || now }));
         db.prepare('UPDATE orders SET status=?, inventoryDeducted=1, readyAt=?, items=? WHERE id=?')

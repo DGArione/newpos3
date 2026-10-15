@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { History as HistoryIcon, Search, Receipt, RefreshCw, X, Printer, Undo2 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
-import { money, useSettings } from "@/lib/settings";
+import { money, useSettings, discountAmount } from "@/lib/settings";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import type { Order } from "@/lib/types";
@@ -291,7 +291,7 @@ function OrderDetail({ order, currency, settings, refundTotal, onClose, onRefund
 
       <div className="rounded-xl p-4" style={{ background: "var(--panel-2)" }}>
         <TotalLine label="Subtotal" value={money(order.subtotal, currency)} />
-        {order.discount > 0 && <TotalLine label="Discount" value={`−${money(order.discount, currency)}`} warn />}
+        {discountAmount(order.discount) > 0 && <TotalLine label="Discount" value={`−${money(discountAmount(order.discount), currency)}`} warn />}
         {order.serviceCharge > 0 && <TotalLine label="Service" value={money(order.serviceCharge, currency)} />}
         {order.vat > 0 && <TotalLine label="VAT" value={money(order.vat, currency)} />}
         <div className="divider my-2" />

@@ -89,6 +89,14 @@ export function useSettings() {
   return settings;
 }
 
+/** Read the money value off an order discount, whether it's a number or a
+ *  {amount} object (the backend returns the object form). */
+export function discountAmount(d: number | { amount?: number } | null | undefined): number {
+  if (!d) return 0;
+  if (typeof d === "number") return d;
+  return Number(d.amount) || 0;
+}
+
 export function money(amount: number, currency = "Rs. "): string {
   const n = Number(amount) || 0;
   const body = n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });

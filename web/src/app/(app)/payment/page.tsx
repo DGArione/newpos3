@@ -7,7 +7,7 @@ import {
   Delete, Star, Gift,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
-import { money, useSettings } from "@/lib/settings";
+import { money, useSettings, discountAmount } from "@/lib/settings";
 import { Order } from "@/lib/types";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
 import { printReceipt } from "@/lib/receipt";
@@ -200,7 +200,7 @@ function PaymentInner() {
                   {/* Totals */}
                   <div className="border-t border-dashed border-line pt-3 space-y-1 text-[13px]">
                     <Row label="Subtotal" value={money(selected.subtotal, currency)} />
-                    {selected.discount > 0 && <Row label="Discount" value={`– ${money(selected.discount, currency)}`} warn />}
+                    {discountAmount(selected.discount) > 0 && <Row label="Discount" value={`– ${money(discountAmount(selected.discount), currency)}`} warn />}
                     {selected.serviceCharge > 0 && <Row label="Service" value={money(selected.serviceCharge, currency)} />}
                     {selected.vat > 0 && <Row label="VAT" value={money(selected.vat, currency)} />}
                     <div className="flex justify-between pt-1.5 text-[16px] font-semibold border-t border-line mt-2 pt-2">
@@ -367,7 +367,7 @@ function DiscountModal({ order, currency, onClose, onDone }: { order: Order; cur
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const hasDiscount = (order.discount || 0) > 0;
+  const hasDiscount = discountAmount(order.discount) > 0;
   async function apply() {
     setBusy(true); setErr("");
     try { const o = await apiPost<Order>(`/orders/${order.id}/discount`, { type, value: Number(value) || 0, reason, pin }); onDone(o); }

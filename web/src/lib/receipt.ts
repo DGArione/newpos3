@@ -46,6 +46,8 @@ export function printReceipt(o: Order, settings: Partial<PublicSettings> & { rec
 
   const tendered = opts.tendered;
   const balance = tendered != null ? Math.max(0, tendered - (o.grandTotal || o.total)) : null;
+  // discount may be a number or a {amount} object depending on the source
+  const discVal = typeof o.discount === "number" ? o.discount : Number((o.discount as { amount?: number } | null)?.amount) || 0;
 
   // Scannable bill identifier (CODE128). Uses the order id so a scan maps back
   // to exactly one bill; falls back to the display number.
@@ -107,7 +109,7 @@ export function printReceipt(o: Order, settings: Partial<PublicSettings> & { rec
     <hr class="rule">
     <table class="tot">
       <tr><td>Subtotal</td><td>${money(o.subtotal)}</td></tr>
-      ${o.discount > 0 ? `<tr><td>Discount</td><td>- ${money(o.discount)}</td></tr>` : ""}
+      ${discVal > 0 ? `<tr><td>Discount</td><td>- ${money(discVal)}</td></tr>` : ""}
       ${o.serviceCharge > 0 ? `<tr><td>Service charge</td><td>${money(o.serviceCharge)}</td></tr>` : ""}
       ${o.vat > 0 ? `<tr><td>VAT / Tax</td><td>${money(o.vat)}</td></tr>` : ""}
     </table>

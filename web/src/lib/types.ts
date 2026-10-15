@@ -51,6 +51,14 @@ export interface OrderItem {
   status: string; // pending | ready | served
 }
 
+export interface DiscountInfo {
+  type?: string;      // percent | fixed
+  value?: number;
+  amount?: number;    // the actual money taken off
+  reason?: string;
+  approvedBy?: string;
+}
+
 export interface OrderPayment {
   method: string;            // cash | card | online
   type?: string;             // payment | refund
@@ -74,7 +82,9 @@ export interface Order {
   note?: string;
   items: OrderItem[];
   subtotal: number;
-  discount: number;
+  // backend stores this as a {type,value,amount} object (or null); older code
+  // paths may still hand back a plain number — use discountAmount() to read it.
+  discount?: number | DiscountInfo | null;
   serviceCharge: number;
   vat: number;
   total: number;
