@@ -305,9 +305,13 @@ function TableEditor({
 }
 
 function QrModal({ table, onClose, onRegenerate }: { table: TableRow; onClose: () => void; onRegenerate: () => void }) {
-  const url = typeof window !== "undefined"
-    ? `${window.location.origin}/t/${table.qrToken || table.id}`
-    : "";
+  const settings = useSettings();
+  // Prefer the configured public URL (Settings → QR / online) so the QR works
+  // off-device; fall back to this browser's origin (localhost in dev).
+  const base = (settings?.publicBaseUrl || "").replace(/\/+$/, "") ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  const url = base ? `${base}/t/${table.qrToken || table.id}` : "";
+  const usingLocal = !settings?.publicBaseUrl;
   // use QR server generator — simple + works offline for the PNG from any device
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(url)}`;
   return (
@@ -318,6 +322,11 @@ function QrModal({ table, onClose, onRegenerate }: { table: TableRow; onClose: (
         <div className="text-[11.5px] text-muted font-mono break-all text-center">
           {url}
         </div>
+        {usingLocal && (
+          <div className="text-[11px] text-center rounded-lg px-3 py-2" style={{ background: "var(--warn-wash)", color: "var(--warn)" }}>
+            This points to this device only. Set a <strong>Public URL</strong> in Settings → Online / QR so customers can scan it from their phones.
+          </div>
+        )}
         <div className="flex gap-2 w-full">
           <button onClick={() => navigator.clipboard.writeText(url).then(() => alert("Link copied"))} className="btn btn-ghost flex-1">
             Copy link

@@ -359,34 +359,55 @@ function Row({ label, value, warn, ok }: { label: string; value: string; warn?: 
 
 /* ------------------------- Discount modal ------------------------- */
 function DiscountModal({ order, currency, onClose, onDone }: { order: Order; currency: string; onClose: () => void; onDone: (o: Order) => void }) {
-  const [type, setType] = useState<"percent" | "amount">("percent");
+  // NOTE: backend expects "percent" | "fixed" — sending "amount" silently fell
+  // back to percent, so a fixed amount was applied as a percentage. Keep "fixed".
+  const [type, setType] = useState<"percent" | "fixed">("percent");
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const hasDiscount = (order.discount || 0) > 0;
   async function apply() {
     setBusy(true); setErr("");
-    try { const o = await apiPost<Order>(`/orders/${order.id}/discount`, { type, value, reason, pin }); onDone(o); }
+    try { const o = await apiPost<Order>(`/orders/${order.id}/discount`, { type, value: Number(value) || 0, reason, pin }); onDone(o); }
     catch (e) { setErr(e instanceof Error ? e.message : "Could not apply"); }
     finally { setBusy(false); }
   }
+  async function remove() {
+    setBusy(true); setErr("");
+    // value 0 tells the backend to clear the discount
+    try { const o = await apiPost<Order>(`/orders/${order.id}/discount`, { type: "percent", value: 0, reason: "Discount removed", pin }); onDone(o); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Could not remove"); }
+    finally { setBusy(false); }
+  }
+  const preview = value
+    ? type === "percent"
+      ? money((order.subtotal * (Number(value) || 0)) / 100, currency)
+      : money(Number(value) || 0, currency)
+    : null;
   return (
     <Modal open title="Apply discount" onClose={onClose} width={420}>
       <div className="space-y-3">
         <div className="flex gap-1.5 p-1 rounded-full" style={{ background: "var(--panel-2)" }}>
-          {(["percent", "amount"] as const).map((t) => (
+          {(["percent", "fixed"] as const).map((t) => (
             <button key={t} onClick={() => setType(t)} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold capitalize"
               style={type === t ? { background: "var(--panel)", color: "var(--olive-700)" } : { color: "var(--muted)" }}>
               {t === "percent" ? "Percent %" : `Amount (${currency.trim()})`}
             </button>
           ))}
         </div>
-        <input className="inp" inputMode="numeric" placeholder={type === "percent" ? "e.g. 10" : "e.g. 500"} value={value} onChange={(e) => setValue(e.target.value)} />
+        <input className="inp" inputMode="numeric" placeholder={type === "percent" ? "e.g. 10 (%)" : `e.g. 500 (${currency.trim()})`} value={value} onChange={(e) => setValue(e.target.value)} />
+        {preview && <div className="text-[12.5px] text-muted">Takes off <span className="font-semibold text-ink">{preview}</span> from {money(order.subtotal, currency)}</div>}
         <input className="inp" placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-        <input className="inp" type="password" placeholder="Manager PIN (if required)" value={pin} onChange={(e) => setPin(e.target.value)} />
+        <input className="inp" type="password" placeholder="Manager PIN (required for fixed amounts / over limit)" value={pin} onChange={(e) => setPin(e.target.value)} />
         {err && <div className="text-sm text-bad">{err}</div>}
         <button onClick={apply} disabled={busy} className="btn btn-primary w-full">Apply discount</button>
+        {hasDiscount && (
+          <button onClick={remove} disabled={busy} className="btn btn-ghost w-full" style={{ color: "var(--bad)" }}>
+            Remove current discount
+          </button>
+        )}
       </div>
     </Modal>
   );
@@ -433,8 +454,8 @@ function GiftCardModal({ order, currency, onClose, onDone }: { order: Order; cur
   return (
     <Modal open title="Pay with gift card" onClose={onClose} width={400}>
       <div className="space-y-3">
-        <p className="text-sm text-muted">Enter the gift card code to use its balance towards this order.</p>
-        <input className="inp mono uppercase tracking-widest" placeholder="GCXXXXXXXXXX" value={code} autoFocus
+        <p className="text-sm text-muted">Scan the card's barcode (it types the code and submits automatically), or type the code and press Enter.</p>
+        <input className="inp mono uppercase tracking-widest" placeholder="Scan or type · GCXXXXXXXXXX" value={code} autoFocus
           onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && apply()} />
         {err && <div className="text-sm text-bad">{err}</div>}
         <button onClick={apply} disabled={busy || !code.trim()} className="btn btn-primary w-full">Apply gift card</button>

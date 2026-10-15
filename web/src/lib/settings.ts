@@ -27,6 +27,9 @@ export interface PublicSettings {
   enabledAddons: string[];
   defaultOrderType: string;
   homeBanners?: HomeBanner[];
+  /** Public base URL used for customer-facing QR links (menu / ordering). */
+  publicBaseUrl?: string;
+  qrOrderAutoKitchen?: boolean;
 }
 
 /** Apply the brand accent colour from settings to the live CSS variables. */

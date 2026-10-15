@@ -22,6 +22,8 @@ interface Settings {
   logoUrl?: string;
   loginBgUrl?: string;
   accentColor?: string;
+  publicBaseUrl?: string;
+  qrOrderAutoKitchen?: boolean;
 }
 
 const THEME_PRESETS = [
@@ -77,6 +79,11 @@ export default function SettingsPage() {
         logoUrl: s.logoUrl || "",
         loginBgUrl: s.loginBgUrl || "",
         accentColor: s.accentColor || "",
+      });
+      // publicBaseUrl / qrOrderAutoKitchen live on a separate endpoint
+      await apiPut("/qr/settings", {
+        publicBaseUrl: (s.publicBaseUrl || "").trim(),
+        qrOrderAutoKitchen: s.qrOrderAutoKitchen !== false,
       });
       await savedAndRefresh();
       applyAccent(s.accentColor);
@@ -155,6 +162,31 @@ export default function SettingsPage() {
         <div className="mt-3">
           <Field label="Receipt footer" value={s.receiptFooterText} onChange={(v) => set("receiptFooterText", v)} />
         </div>
+      </Screen>
+
+      {/* ---- Online ordering & QR ---- */}
+      <Screen>
+        <div className="eyebrow mb-1">Online ordering &amp; QR</div>
+        <p className="text-[11.5px] text-muted mb-4">
+          The address customers reach your menu at when they scan a table QR code. Leave blank to use this device&rsquo;s
+          address (works only on the same network). Set your public domain or tunnel URL so phones can open it anywhere.
+        </p>
+        <Field
+          label="Public URL"
+          placeholder="https://menu.yourrestaurant.com"
+          value={s.publicBaseUrl || ""}
+          onChange={(v) => set("publicBaseUrl", v)}
+        />
+        {s.publicBaseUrl && (
+          <div className="text-[11.5px] text-muted mt-2">
+            QR codes will point to <code className="font-mono">{(s.publicBaseUrl || "").replace(/\/+$/, "")}/t/&lt;table&gt;</code>
+          </div>
+        )}
+        <label className="flex items-center gap-2.5 mt-4 cursor-pointer">
+          <input type="checkbox" checked={s.qrOrderAutoKitchen !== false}
+            onChange={(e) => set("qrOrderAutoKitchen", e.target.checked)} />
+          <span className="text-[13px] text-ink">Send QR / online orders straight to the kitchen</span>
+        </label>
       </Screen>
 
       {/* ---- Appearance ---- */}
@@ -314,11 +346,11 @@ export default function SettingsPage() {
   );
 }
 
-function Field({ label, value, onChange, mono }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean }) {
+function Field({ label, value, onChange, mono, placeholder }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean; placeholder?: string }) {
   return (
     <div>
       <label className="lbl">{label}</label>
-      <input className={`inp ${mono ? "mono" : ""}`} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+      <input className={`inp ${mono ? "mono" : ""}`} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

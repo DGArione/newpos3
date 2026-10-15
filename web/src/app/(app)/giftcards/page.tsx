@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Gift, Plus, Search, Ban, CheckCircle2, Copy } from "lucide-react";
+import { Gift, Plus, Search, Ban, CheckCircle2, Copy, Printer } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { money, useSettings } from "@/lib/settings";
 import { PageHeader, PageLoader, EmptyState, Screen, useToast, Modal } from "@/components/ui";
@@ -51,6 +51,42 @@ export default function GiftCardsPage() {
     catch { toast.push("bad", "Could not copy"); }
   }
 
+  function printCard(c: GiftCard) {
+    const biz = settings?.businessName || "Gift Card";
+    const bal = money(c.balance, currency);
+    const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m] as string));
+    const barcode = `https://barcodeapi.org/api/128/${encodeURIComponent(c.code)}`;
+    const win = window.open("", "_blank", "width=520,height=360");
+    if (!win) { toast.push("bad", "Pop-up blocked — allow pop-ups to print"); return; }
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Gift card ${esc(c.code)}</title>
+      <style>
+        @page { size: 90mm 55mm; margin: 0; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family: "Poppins", Arial, sans-serif; }
+        .card { width:90mm; height:55mm; padding:6mm 7mm; color:#fff;
+          background: linear-gradient(135deg,#f6990d 0%,#b4690a 100%);
+          display:flex; flex-direction:column; justify-content:space-between; }
+        .top { display:flex; justify-content:space-between; align-items:flex-start; }
+        .biz { font-size:13px; font-weight:800; letter-spacing:.5px; }
+        .tag { font-size:9px; text-transform:uppercase; letter-spacing:2px; opacity:.85; }
+        .bal { font-size:30px; font-weight:800; letter-spacing:.5px; }
+        .bal small { font-size:11px; font-weight:600; opacity:.85; }
+        .bc { background:#fff; border-radius:4px; padding:3px 6px; }
+        .bc img { height:34px; width:100%; object-fit:contain; display:block; }
+        .code { text-align:center; font-family:monospace; font-size:11px; letter-spacing:2px; color:#333; }
+        .foot { font-size:8.5px; opacity:.8; }
+      </style></head><body>
+      <div class="card">
+        <div class="top"><div class="biz">${esc(biz)}</div><div class="tag">Gift Card</div></div>
+        <div class="bal">${esc(bal)} <small>balance</small></div>
+        <div class="bc"><img src="${barcode}" alt="${esc(c.code)}"><div class="code">${esc(c.code)}</div></div>
+        <div class="foot">${c.recipientName ? "For " + esc(c.recipientName) + " · " : ""}Present this card or scan the barcode to redeem.</div>
+      </div>
+      <script>window.onload=function(){setTimeout(function(){window.print();},300);};window.onafterprint=function(){window.close();};</script>
+      </body></html>`);
+    win.document.close();
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <Screen>
@@ -98,13 +134,22 @@ export default function GiftCardsPage() {
                       {c.status}
                     </span>
                   </div>
-                  <button
-                    onClick={() => toggle(c)}
-                    className="opacity-80 hover:opacity-100"
-                    title={c.status === "active" ? "Disable card" : "Re-enable card"}
-                  >
-                    {c.status === "active" ? <Ban size={14} /> : <CheckCircle2 size={14} />}
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      onClick={() => printCard(c)}
+                      className="opacity-80 hover:opacity-100"
+                      title="Print gift card with barcode"
+                    >
+                      <Printer size={14} />
+                    </button>
+                    <button
+                      onClick={() => toggle(c)}
+                      className="opacity-80 hover:opacity-100"
+                      title={c.status === "active" ? "Disable card" : "Re-enable card"}
+                    >
+                      {c.status === "active" ? <Ban size={14} /> : <CheckCircle2 size={14} />}
+                    </button>
+                  </div>
                 </div>
                 <div className="mono text-[20px] font-semibold my-3">{money(c.balance, currency)}</div>
                 {/* Scannable barcode (CODE128) */}

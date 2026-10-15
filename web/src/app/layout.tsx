@@ -28,8 +28,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        {/* Map Poppins onto the --f-sans token the design system uses. */}
-        <style>{`:root{--f-sans:'Poppins';}`}</style>
+        {/* Map Poppins onto the --f-sans token the design system uses.
+            No quotes around the font name — quotes get HTML-escaped differently
+            on server vs client and trip React's hydration check. */}
+        <style dangerouslySetInnerHTML={{ __html: ":root{--f-sans:Poppins,ui-sans-serif,system-ui,sans-serif;}" }} />
         {/* set theme before paint to avoid a flash */}
         <script
           dangerouslySetInnerHTML={{
