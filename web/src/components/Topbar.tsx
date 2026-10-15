@@ -101,7 +101,7 @@ export function AppHeader({ onSearch }: { onSearch?: () => void }) {
 
   // Clocked-in duration (short)
   let shiftLabel = "Clock in";
-  let shiftHref = "/timeclock";
+  const shiftHref = "/timeclock";
   if (openShift) {
     const mins = Math.floor((clock.getTime() - new Date(openShift.clockIn).getTime()) / 60000);
     const h = Math.floor(mins / 60), m = mins % 60;

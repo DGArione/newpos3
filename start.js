@@ -11,7 +11,8 @@
  *   npm run start:classic         (serves at http://localhost:3000)
  */
 
-const { spawn } = require("node:child_process");
+const { spawn, execSync } = require("node:child_process");
+const net = require("node:net");
 const path = require("node:path");
 
 const PORT_BACKEND = Number(process.env.BACKEND_PORT) || 3001;
@@ -20,54 +21,75 @@ const PORT_WEB     = Number(process.env.PORT) || 3000;
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const sep = "─".repeat(60);
 
-console.log(`\n🧡  Golden POS — launching\n${sep}`);
-console.log(`   • Backend API  →  http://localhost:${PORT_BACKEND}`);
-console.log(`   • Golden POS UI →  http://localhost:${PORT_WEB}\n${sep}\n`);
+// ── Free a stuck port from a previous run (so EADDRINUSE never blocks us) ──
+function freePort(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once("error", () => {
+        // Port busy — try to kill whatever is holding it.
+        console.log(`   ⚠ Port ${port} is in use — freeing it…`);
+        try {
+          if (process.platform === "win32") {
+            const out = execSync(`netstat -ano -p tcp | findstr :${port}`, { stdio: ["ignore", "pipe", "ignore"] }).toString();
+            const pids = new Set();
+            out.split(/\r?\n/).forEach((line) => {
+              const m = line.trim().match(/LISTENING\s+(\d+)\s*$/);
+              if (m) pids.add(m[1]);
+            });
+            pids.forEach((pid) => { try { execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" }); } catch {} });
+          } else {
+            execSync(`lsof -ti tcp:${port} | xargs -r kill -9`, { stdio: "ignore", shell: "/bin/bash" });
+          }
+        } catch { /* best effort */ }
+        setTimeout(resolve, 600);
+      })
+      .once("listening", () => tester.close(resolve))
+      .listen(port, "0.0.0.0");
+  });
+}
 
-// ── Backend (Express + SQLite) ──────────────────────────────────────
-const backend = spawn(npm, ["start"], {
-  cwd: path.join(__dirname, "backend"),
-  env: { ...process.env, PORT: String(PORT_BACKEND) },
-  stdio: ["inherit", "inherit", "inherit"],
-  shell: true,
-});
+async function main() {
+  console.log(`\n🧡  Golden POS — launching\n${sep}`);
+  console.log(`   • Backend API  →  http://localhost:${PORT_BACKEND}`);
+  console.log(`   • Golden POS UI →  http://localhost:${PORT_WEB}\n${sep}\n`);
 
-backend.on("error", (err) => {
-  console.error("Backend failed to start:", err.message);
-  process.exit(1);
-});
+  await freePort(PORT_BACKEND);
+  await freePort(PORT_WEB);
 
-// ── Next.js UI (built-in dev server; auto-recompiles on edits) ──────
-// Delay the UI startup a touch so the backend has a chance to seed the DB.
-setTimeout(() => {
-  const web = spawn(npm, ["run", "dev"], {
-    cwd: path.join(__dirname, "web"),
-    env: {
-      ...process.env,
-      PORT: String(PORT_WEB),
-      BACKEND_URL: `http://localhost:${PORT_BACKEND}`,
-    },
+  // ── Backend (Express + SQLite) ──────────────────────────────────────
+  const backend = spawn(npm, ["start"], {
+    cwd: path.join(__dirname, "backend"),
+    env: { ...process.env, PORT: String(PORT_BACKEND) },
     stdio: ["inherit", "inherit", "inherit"],
     shell: true,
   });
+  backend.on("error", (err) => console.error("Backend failed to start:", err.message));
 
-  web.on("error", (err) => {
-    console.error("Next.js UI failed to start:", err.message);
-  });
+  // ── Next.js UI (dev server) ──────────────────────────────────────
+  setTimeout(() => {
+    const web = spawn(npm, ["run", "dev"], {
+      cwd: path.join(__dirname, "web"),
+      env: { ...process.env, PORT: String(PORT_WEB), BACKEND_URL: `http://localhost:${PORT_BACKEND}` },
+      stdio: ["inherit", "inherit", "inherit"],
+      shell: true,
+    });
+    web.on("error", (err) => console.error("Next.js UI failed to start:", err.message));
+    web.on("exit", (code) => {
+      // Don't tear down the backend just because the UI hiccuped on first boot.
+      if (code && code !== 0) {
+        console.log(`\n⚠ UI exited (code ${code}). Backend is still running on :${PORT_BACKEND}.`);
+        console.log(`  Fix the UI and run 'npm run dev:web' in the web/ folder, or restart with 'npm start'.`);
+      }
+    });
+  }, 2500);
 
-  web.on("exit", (code) => {
-    console.log(`\nUI exited (code ${code}). Stopping backend.`);
-    backend.kill();
-    process.exit(code || 0);
-  });
-}, 2500);
-
-// Clean shutdown
-function shutdown() {
-  console.log("\n🧡  Stopping Golden POS…");
-  backend.kill();
-  process.exit(0);
+  function shutdown() {
+    console.log("\n🧡  Stopping Golden POS…");
+    try { backend.kill(); } catch {}
+    process.exit(0);
+  }
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+main();

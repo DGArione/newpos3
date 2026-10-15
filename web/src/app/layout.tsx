@@ -1,14 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Poppins } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--f-sans",
-  display: "swap",
-});
+// NOTE: we load Poppins via a plain <link> (not next/font) so the app does not
+// require the native SWC binary — that binary keeps getting corrupted on some
+// Windows machines after low-disk installs. With a .babelrc present, Next uses
+// Babel and never touches SWC, and the fonts still load fine from a <link>.
 
 export const metadata: Metadata = {
   title: "Golden Beach Restaurant · POS",
@@ -23,8 +20,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={poppins.variable} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+        {/* Map Poppins onto the --f-sans token the design system uses. */}
+        <style>{`:root{--f-sans:'Poppins';}`}</style>
         {/* set theme before paint to avoid a flash */}
         <script
           dangerouslySetInnerHTML={{
